@@ -3,7 +3,7 @@
 - LexBundler is a PySide6 native desktop application.
 - The core application must remain language- and source-agnostic.
 - SQLite will be the canonical project datastore.
-- Store timestamps internally as integer milliseconds.
+- Store media timestamps and offsets internally as integer milliseconds.
 - Raw imported, ASR, and source data must remain distinct from canonical reviewed utterance data.
 - Preserve data provenance.
 - Media files remain on disk; SQLite stores paths, metadata, and hashes rather than embedding media blobs.
@@ -14,4 +14,12 @@
 - Source-specific functionality such as Mandarin, HSK, Whisper, or Anki must not contaminate the generic core architecture.
 - Copyrighted corpus or source material must never be committed to the repository.
 - Prefer straightforward, maintainable Python over premature abstractions.
-
+- A LexBundler project is a corpus workspace, typically centered on one primary language.
+- Primary project language is metadata, not a restriction against multilingual content, translations, annotations, or code-switching.
+- Core domain and persistence models must remain language-agnostic.
+- Language-specific processing belongs behind future pluggable language or NLP interfaces rather than in the generic core.
+- Project and domain metadata is distinct from persistence-format and schema metadata.
+- Application code depends on meaningful repository or store interfaces, not generic SQL execution abstractions.
+- Database-vendor-specific behavior remains behind persistence boundaries.
+- SQLite connections are persistence implementation details and must not become globally shared application objects or be casually shared across Qt threads.
+- Database schema changes must use the migration mechanism rather than ad-hoc runtime schema mutation.
