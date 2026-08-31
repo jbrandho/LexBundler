@@ -23,3 +23,12 @@
 - Database-vendor-specific behavior remains behind persistence boundaries.
 - SQLite connections are persistence implementation details and must not become globally shared application objects or be casually shared across Qt threads.
 - Database schema changes must use the migration mechanism rather than ad-hoc runtime schema mutation.
+- Original imported assets are immutable evidence and must not be modified by LexBundler.
+- Asset identity is content-based using SHA-256; filesystem locations are observations, not identity.
+- Identical file bytes may be deduplicated and shared across sources and observed locations.
+- Source organization is generic and hierarchical; source-specific concepts belong in import adapters and data rather than core table names.
+- Assets may attach to an entire source or to a particular generic source unit.
+- Derived representations must preserve provenance back to original evidence.
+- Future segmentation and annotation layers must be additive rather than destructively rewriting imported representations.
+- JSON metadata is for opaque source-specific information, not a replacement for first-class queryable schema.
+- UI operations that hash or process large files must run outside the Qt UI thread.

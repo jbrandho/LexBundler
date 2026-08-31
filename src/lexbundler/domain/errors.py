@@ -44,3 +44,31 @@ class InvalidMigrationStateError(ProjectMigrationError):
 class InvalidProjectMetadataError(ProjectError):
     """Raised when supplied project metadata is incomplete or invalid."""
 
+
+class CorpusError(Exception):
+    """Base class for source, asset, and provenance operation failures."""
+
+
+class NoOpenProjectError(CorpusError):
+    """Raised when a corpus operation requires an open project."""
+
+
+class CorpusEntityNotFoundError(CorpusError):
+    """Raised when a requested corpus entity does not exist."""
+
+
+class CorpusIntegrityError(CorpusError):
+    """Raised when a corpus relationship or constraint is invalid."""
+
+
+class InvalidCorpusDataError(CorpusError):
+    """Raised when application input is malformed."""
+
+
+class AssetFileError(CorpusError):
+    """Raised when a local asset path cannot be safely read."""
+
+
+class CorpusStorageError(CorpusError):
+    """Raised when corpus persistence fails unexpectedly."""
+

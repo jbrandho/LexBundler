@@ -16,6 +16,21 @@ UI code delegates lifecycle operations to `ProjectService`, which depends on a m
 
 SQLite is the only implemented backend. A PostgreSQL store may be considered later, but PostgreSQL support does not currently exist.
 
+## Corpus foundation
+
+Schema v2 introduces the first generic corpus-storage model:
+
+- A **Source** is a logical external corpus or material collection.
+- A **SourceUnit** is an optional, arbitrarily deep hierarchy inside a source. Unit kinds and labels are ordinary data, so the core does not hard-code books, lessons, episodes, or other provider concepts.
+- An **Asset** is immutable imported file content identified by its SHA-256 digest and exact byte size.
+- An **AssetLocation** records where those exact bytes were observed. A filesystem path is historical evidence, not asset identity or a guarantee that the path remains valid.
+- An **AssetBinding** records evidence relating an asset to a whole source or a particular source unit, including optional method, confidence, and processing provenance.
+- A **ProcessingRun** records generic import or processing activity and its reproducibility parameters.
+
+LexBundler hashes files incrementally and never changes or copies the original file. File and media bytes are not embedded as SQLite blobs. Identical bytes observed at different paths deduplicate to one Asset while retaining each distinct location observation.
+
+Future extracted text, segments, annotations, and reviewed representations will be additive layers traceable to original evidence rather than destructive replacements. Text storage, segmentation, NLP, and source-specific importers are not implemented yet.
+
 ## Development setup
 
 Python 3.13 or newer is required. Create and activate a virtual environment:

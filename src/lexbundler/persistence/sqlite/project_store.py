@@ -1,9 +1,9 @@
 """SQLite-backed LexBundler project persistence."""
 
 import os
-import sqlite3
 import tempfile
-from datetime import UTC, datetime
+import sqlite3
+from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -16,21 +16,33 @@ from lexbundler.domain.errors import (
     UnsupportedSchemaVersionError,
 )
 from lexbundler.domain.project import ProjectMetadata
+from lexbundler.persistence.sqlite.corpus_store import SQLiteCorpusStore
+from lexbundler.persistence.sqlite.database import connect as _connect
 from lexbundler.persistence.sqlite.migrations import Migration, run_migrations
+from lexbundler.persistence.sqlite.serialization import (
+    format_utc as _format_utc,
+    parse_utc as _parse_utc,
+)
 from lexbundler.persistence.sqlite.schema import (
     CURRENT_SCHEMA_VERSION,
     FORMAT_ID,
+    create_corpus_schema_v2,
     create_current_schema,
 )
 
-# Version 1 is created directly. Add real, ordered production migrations here.
-MIGRATIONS: tuple[Migration, ...] = ()
+
+def _migrate_to_v2(connection: sqlite3.Connection) -> None:
+    create_corpus_schema_v2(connection)
 
 
-class SQLiteProjectStore:
+MIGRATIONS: tuple[Migration, ...] = (Migration(2, _migrate_to_v2),)
+
+
+class SQLiteProjectStore(SQLiteCorpusStore):
     """An opened SQLite project using short-lived operation connections."""
 
     def __init__(self, path: Path, metadata: ProjectMetadata) -> None:
+        super().__init__(path)
         self._path = path
         self._metadata = metadata
 
@@ -43,6 +55,7 @@ class SQLiteProjectStore:
 
         Connections are operation-scoped, so there is no persistent handle to close.
         """
+        super().close()
 
 
 class SQLiteProjectStoreFactory:
@@ -133,17 +146,6 @@ class SQLiteProjectStoreFactory:
             ) from error
 
 
-def _connect(path: Path, *, existing: bool = False) -> sqlite3.Connection:
-    if existing:
-        database = f"{path.resolve().as_uri()}?mode=rw"
-        connection = sqlite3.connect(database, uri=True, isolation_level=None)
-    else:
-        connection = sqlite3.connect(path, isolation_level=None)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
-
-
 def _insert_project(
     connection: sqlite3.Connection, metadata: ProjectMetadata
 ) -> None:
@@ -220,19 +222,4 @@ def _read_project(connection: sqlite3.Connection) -> ProjectMetadata:
         )
     except (TypeError, ValueError) as error:
         raise InvalidProjectError("Project metadata is malformed.") from error
-
-
-def _format_utc(value: datetime) -> str:
-    if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError("Project timestamps must be timezone-aware.")
-    return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
-def _parse_utc(value: object) -> datetime:
-    if not isinstance(value, str) or not value.endswith("Z"):
-        raise ValueError("Project timestamps must be RFC 3339 UTC text.")
-    parsed = datetime.fromisoformat(f"{value[:-1]}+00:00")
-    if parsed.tzinfo is None:
-        raise ValueError("Project timestamp is ambiguous.")
-    return parsed.astimezone(UTC)
 

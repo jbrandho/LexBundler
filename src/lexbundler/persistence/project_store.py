@@ -4,9 +4,10 @@ from pathlib import Path
 from typing import Protocol
 
 from lexbundler.domain.project import ProjectMetadata
+from lexbundler.persistence.corpus_store import CorpusStore
 
 
-class ProjectStore(Protocol):
+class ProjectStore(CorpusStore, Protocol):
     """An opened project persistence session."""
 
     @property
@@ -29,4 +30,3 @@ class ProjectStoreFactory(Protocol):
     def open(self, location: Path) -> ProjectStore:
         """Validate and open an existing project."""
         ...
-

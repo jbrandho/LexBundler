@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from lexbundler.application.corpus_service import CorpusService
 from lexbundler.domain.errors import (
     InvalidProjectMetadataError,
     ProjectAlreadyOpenError,
@@ -20,6 +21,12 @@ class ProjectService:
     def __init__(self, store_factory: ProjectStoreFactory) -> None:
         self._store_factory = store_factory
         self._current_store: ProjectStore | None = None
+        self._corpus_service = CorpusService()
+
+    @property
+    def corpus(self) -> CorpusService:
+        """Return corpus operations scoped to the current project."""
+        return self._corpus_service
 
     @property
     def current_project(self) -> ProjectMetadata | None:
@@ -56,6 +63,7 @@ class ProjectService:
             updated_at=now,
         )
         self._current_store = self._store_factory.create(path, metadata)
+        self._corpus_service._attach(self._current_store)
         return metadata
 
     def open_project(self, location: Path) -> ProjectMetadata:
@@ -63,6 +71,7 @@ class ProjectService:
         self._require_closed()
         store = self._store_factory.open(Path(location))
         self._current_store = store
+        self._corpus_service._attach(store)
         return store.metadata
 
     def close_project(self) -> None:
@@ -71,6 +80,7 @@ class ProjectService:
             return
         store = self._current_store
         self._current_store = None
+        self._corpus_service._detach()
         store.close()
 
     def _require_closed(self) -> None:
@@ -85,4 +95,3 @@ def _optional_text(value: str | None) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
-
