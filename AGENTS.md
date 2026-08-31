@@ -32,3 +32,14 @@
 - Future segmentation and annotation layers must be additive rather than destructively rewriting imported representations.
 - JSON metadata is for opaque source-specific information, not a replacement for first-class queryable schema.
 - UI operations that hash or process large files must run outside the Qt UI thread.
+- TextRepresentations are immutable snapshots; transformations create new representations instead of overwriting content.
+- Equal Unicode content does not deduplicate TextRepresentations; their identity is contextual and provenance-based.
+- Text offsets are zero-based, half-open Python Unicode code-point offsets into the exact stored string.
+- Never silently Unicode-normalize stored TextRepresentation content.
+- Media ranges are zero-based, half-open integer milliseconds.
+- Segments are analytical units and do not own copied transcript text; they refer to TextRepresentations through spans.
+- Segment hierarchy is distinct from SourceUnit publishing/source hierarchy.
+- Overlapping text and media spans are valid.
+- Segment parentage is layer-local and does not imply exclusive interval containment.
+- Speakers are source-scoped and associate many-to-many with Segments.
+- Span-level provenance may differ from layer and segment provenance.

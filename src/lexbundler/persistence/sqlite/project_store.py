@@ -28,17 +28,26 @@ from lexbundler.persistence.sqlite.schema import (
     FORMAT_ID,
     create_corpus_schema_v2,
     create_current_schema,
+    create_text_segment_schema_v3,
 )
+from lexbundler.persistence.sqlite.text_segment_store import SQLiteTextSegmentStore
 
 
 def _migrate_to_v2(connection: sqlite3.Connection) -> None:
     create_corpus_schema_v2(connection)
 
 
-MIGRATIONS: tuple[Migration, ...] = (Migration(2, _migrate_to_v2),)
+def _migrate_to_v3(connection: sqlite3.Connection) -> None:
+    create_text_segment_schema_v3(connection)
 
 
-class SQLiteProjectStore(SQLiteCorpusStore):
+MIGRATIONS: tuple[Migration, ...] = (
+    Migration(2, _migrate_to_v2),
+    Migration(3, _migrate_to_v3),
+)
+
+
+class SQLiteProjectStore(SQLiteCorpusStore, SQLiteTextSegmentStore):
     """An opened SQLite project using short-lived operation connections."""
 
     def __init__(self, path: Path, metadata: ProjectMetadata) -> None:
@@ -222,4 +231,3 @@ def _read_project(connection: sqlite3.Connection) -> ProjectMetadata:
         )
     except (TypeError, ValueError) as error:
         raise InvalidProjectError("Project metadata is malformed.") from error
-

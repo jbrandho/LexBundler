@@ -69,11 +69,11 @@ def create_real_v1_project(path: Path) -> dict[str, object]:
     return expected
 
 
-def test_current_schema_version_is_two() -> None:
-    assert CURRENT_SCHEMA_VERSION == 2
+def test_current_schema_version_is_three() -> None:
+    assert CURRENT_SCHEMA_VERSION == 3
 
 
-def test_new_project_is_created_directly_with_complete_v2_schema(
+def test_new_project_is_created_directly_with_current_schema(
     tmp_path: Path,
 ) -> None:
     from datetime import UTC, datetime
@@ -98,7 +98,7 @@ def test_new_project_is_created_directly_with_complete_v2_schema(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
         }
-    assert version == 2
+    assert version == 3
     assert V2_TABLES <= tables
 
 
@@ -131,7 +131,7 @@ def test_real_v1_project_migrates_without_changing_metadata(tmp_path: Path) -> N
             for table in V2_TABLES
         }
 
-    assert version == 2
+    assert version == 3
     assert V2_TABLES <= tables
     assert counts == {table: 0 for table in V2_TABLES}
 

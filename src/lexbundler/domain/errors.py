@@ -72,3 +72,7 @@ class AssetFileError(CorpusError):
 class CorpusStorageError(CorpusError):
     """Raised when corpus persistence fails unexpectedly."""
 
+
+class InvalidSpanError(InvalidCorpusDataError):
+    """Raised when a text or media range is malformed or out of bounds."""
+

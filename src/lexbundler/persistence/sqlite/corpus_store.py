@@ -1,10 +1,7 @@
 """SQLite implementation of generic corpus source and evidence operations."""
 
 import sqlite3
-from contextlib import contextmanager
 from datetime import datetime
-from pathlib import Path
-from typing import Iterator
 from uuid import UUID
 
 from lexbundler.domain.corpus import (
@@ -19,9 +16,8 @@ from lexbundler.domain.corpus import (
 from lexbundler.domain.errors import (
     CorpusEntityNotFoundError,
     CorpusIntegrityError,
-    CorpusStorageError,
 )
-from lexbundler.persistence.sqlite.database import connect
+from lexbundler.persistence.sqlite.store_base import SQLiteStoreBase
 from lexbundler.persistence.sqlite.serialization import (
     dump_json,
     format_utc,
@@ -30,15 +26,8 @@ from lexbundler.persistence.sqlite.serialization import (
 )
 
 
-class SQLiteCorpusStore:
+class SQLiteCorpusStore(SQLiteStoreBase):
     """Corpus operations backed by short-lived SQLite connections."""
-
-    def __init__(self, path: Path) -> None:
-        self._path = path
-        self._closed = False
-
-    def close(self) -> None:
-        self._closed = True
 
     def create_source(
         self,
@@ -304,47 +293,6 @@ class SQLiteCorpusStore:
     def get_processing_run(self, run_id: int) -> ProcessingRun:
         with self._connection() as connection:
             return _run_from_row(_row_by_id(connection, "processing_run", run_id))
-
-    @contextmanager
-    def _connection(self, *, write: bool = False) -> Iterator[sqlite3.Connection]:
-        if self._closed:
-            raise CorpusStorageError("The project store is closed.")
-        connection: sqlite3.Connection | None = None
-        try:
-            connection = connect(self._path, existing=True)
-            if write:
-                connection.execute("BEGIN IMMEDIATE")
-            yield connection
-            if write:
-                connection.execute("COMMIT")
-        except CorpusIntegrityError:
-            if connection is not None and connection.in_transaction:
-                connection.execute("ROLLBACK")
-            raise
-        except sqlite3.IntegrityError as error:
-            if connection is not None and connection.in_transaction:
-                connection.execute("ROLLBACK")
-            raise CorpusIntegrityError(
-                "The corpus operation violates project data integrity."
-            ) from error
-        except ValueError as error:
-            if connection is not None and connection.in_transaction:
-                connection.execute("ROLLBACK")
-            raise CorpusIntegrityError(
-                "Stored corpus data is malformed."
-            ) from error
-        except sqlite3.Error as error:
-            if connection is not None and connection.in_transaction:
-                connection.execute("ROLLBACK")
-            raise CorpusStorageError("The corpus database operation failed.") from error
-        except Exception:
-            if connection is not None and connection.in_transaction:
-                connection.execute("ROLLBACK")
-            raise
-        finally:
-            if connection is not None:
-                connection.close()
-
 
 def _row_by_id(
     connection: sqlite3.Connection, table: str, entity_id: object

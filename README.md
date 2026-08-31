@@ -31,6 +31,20 @@ LexBundler hashes files incrementally and never changes or copies the original f
 
 Future extracted text, segments, annotations, and reviewed representations will be additive layers traceable to original evidence rather than destructive replacements. Text storage, segmentation, NLP, and source-specific importers are not implemented yet.
 
+## Text and segmentation foundation
+
+Schema v3 separates immutable evidence, textual interpretations, and analytical structure:
+
+- An **Asset** remains immutable external evidence.
+- A **TextRepresentation** is an immutable Unicode snapshot, such as extracted, raw, normalized, reviewed, translated, or romanized text. Transformations create additional representations rather than overwriting earlier content, and equal strings are not automatically deduplicated.
+- A **SegmentLayer** is one interpretation of structure over a source or source unit.
+- A **Segment** is a conceptual unit inside one layer. Segments do not store or duplicate transcript text.
+- A **SegmentTextSpan** points into a TextRepresentation using a zero-based, half-open Python Unicode code-point range. These are Python string offsets, not UTF-8 byte offsets.
+- A **SegmentMediaSpan** points into an Asset using a zero-based, half-open range of integer milliseconds.
+- A **Speaker** is scoped to one source, while **SegmentSpeaker** supports zero, one, or multiple speaker attributions per segment.
+
+Multiple representations and segmentation layers may coexist, and text or media spans may overlap. Segment hierarchy expresses analytical parentage rather than a non-overlapping interval partition. OCR, ASR, forced alignment, and NLP engines are not implemented yet.
+
 ## Development setup
 
 Python 3.13 or newer is required. Create and activate a virtual environment:
