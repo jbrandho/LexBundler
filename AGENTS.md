@@ -51,3 +51,4 @@
 - Invoke external processes with explicit argument sequences, never shell command strings.
 - Durably preserve generated external-tool artifacts before removing temporary staging workspaces.
 - External-tool execution provenance and artifact-import provenance are distinct operations.
+- Derived media must coexist with original evidence; padding or other artifact boundaries must not silently redefine the underlying analytical Segment.

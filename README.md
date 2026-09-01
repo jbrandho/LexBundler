@@ -2,7 +2,7 @@
 
 A desktop tool for building, aligning, and analyzing linguistic corpora from text and audio.
 
-LexBundler is in early development. It can create, validate, close, and reopen project files and can manually import existing whisper.cpp JSON analysis. Audio playback, alignment, broader import workflows, analysis, and exports are not yet implemented.
+LexBundler is in early development. It can manage project files, preserve source assets, import or produce whisper.cpp analysis, and render selected media spans as durable MP3 clips. Audio playback, alignment, broader import workflows, analysis, and exports are not yet implemented.
 
 ## Projects and persistence
 
@@ -47,7 +47,7 @@ Multiple representations and segmentation layers may coexist, and text or media 
 
 ## Manual whisper.cpp JSON import
 
-LexBundler can normalize an already-existing whisper.cpp JSON file into the schema-v3 model through its application service. This is currently a backend workflow with no import UI, and LexBundler does not execute `whisper-cli` or perform ASR itself.
+LexBundler can normalize an already-existing whisper.cpp JSON file into the schema-v3 model through its application service. This manual-import entry point does not execute `whisper-cli`; integrated execution is described separately below.
 
 The original JSON and source media remain immutable Assets. The JSON is retained as the direct evidence for one exact TextRepresentation; its raw transcription entries become an unreviewed ASR SegmentLayer with exact text and integer-millisecond media spans. Producer token arrays are deliberately not normalized into LexBundler records—the complete token output remains preserved in the original JSON Asset. Raw tool segments are not reinterpreted as sentences, utterances, speaker turns, or pedagogical units.
 
@@ -56,6 +56,12 @@ The original JSON and source media remain immutable Assets. The JSON is retained
 The backend can also invoke a caller-supplied `whisper-cli` executable using a caller-supplied model path and explicit language. Execution occurs in temporary staging, and the caller must choose a new durable JSON output path. LexBundler preserves the native whisper.cpp JSON there before staging is removed, then normalizes that same artifact through the existing manual importer.
 
 Tool execution and normalization are recorded separately: whisper.cpp produces an `asr` ProcessingRun and the JSON Asset, while LexBundler creates a subsequent `import` ProcessingRun and the analytical graph. This synchronous capability has no GUI, progress reporting, cancellation UI, executable discovery, model management, or download support yet; future UI calls must run it outside the Qt main thread.
+
+## Audio clip rendering foundation
+
+The backend can invoke a caller-supplied ffmpeg executable to render a selected SegmentMediaSpan as a durable MP3. The generated clip is registered as a derived Asset and receives an additional `rendered_clip` MediaSpan on the same Segment; the original source Asset and MediaSpan remain unchanged. Optional pre/post padding changes the rendered file boundaries, while the new clip-relative span identifies only where the original linguistic segment occurs inside that padded file.
+
+Rendering is synchronous and backend-only. LexBundler does not discover or install ffmpeg, inspect media with ffprobe, provide rendering UI, or export Anki packages yet. The next planned vertical slice will consume explicitly selected material and rendered clips for Anki export.
 
 ## Development setup
 

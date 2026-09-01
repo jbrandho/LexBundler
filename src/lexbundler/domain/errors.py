@@ -87,3 +87,7 @@ class WhisperCppFormatError(WhisperImportError):
 
 class WhisperExecutionError(CorpusError):
     """Raised when whisper.cpp configuration or execution fails."""
+
+
+class MediaRenderError(CorpusError):
+    """Raised when a durable derived-media rendering operation fails."""

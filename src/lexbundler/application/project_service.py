@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from lexbundler.application.audio_clip_service import AudioClipService
 from lexbundler.application.corpus_service import CorpusService
 from lexbundler.application.text_segment_service import TextSegmentService
 from lexbundler.application.whisper_import_service import WhisperImportService
@@ -32,6 +33,9 @@ class ProjectService:
         self._whisper_execution_service = WhisperExecutionService(
             self._corpus_service, self._whisper_import_service
         )
+        self._audio_clip_service = AudioClipService(
+            self._corpus_service, self._text_segment_service
+        )
 
     @property
     def corpus(self) -> CorpusService:
@@ -52,6 +56,11 @@ class ProjectService:
     def whisper_execution(self) -> WhisperExecutionService:
         """Return the synchronous whisper.cpp execution workflow."""
         return self._whisper_execution_service
+
+    @property
+    def audio_clips(self) -> AudioClipService:
+        """Return the synchronous durable audio-clip rendering workflow."""
+        return self._audio_clip_service
 
     @property
     def current_project(self) -> ProjectMetadata | None:
