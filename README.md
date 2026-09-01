@@ -51,6 +51,12 @@ LexBundler can normalize an already-existing whisper.cpp JSON file into the sche
 
 The original JSON and source media remain immutable Assets. The JSON is retained as the direct evidence for one exact TextRepresentation; its raw transcription entries become an unreviewed ASR SegmentLayer with exact text and integer-millisecond media spans. Producer token arrays are deliberately not normalized into LexBundler records—the complete token output remains preserved in the original JSON Asset. Raw tool segments are not reinterpreted as sentences, utterances, speaker turns, or pedagogical units.
 
+## whisper.cpp execution foundation
+
+The backend can also invoke a caller-supplied `whisper-cli` executable using a caller-supplied model path and explicit language. Execution occurs in temporary staging, and the caller must choose a new durable JSON output path. LexBundler preserves the native whisper.cpp JSON there before staging is removed, then normalizes that same artifact through the existing manual importer.
+
+Tool execution and normalization are recorded separately: whisper.cpp produces an `asr` ProcessingRun and the JSON Asset, while LexBundler creates a subsequent `import` ProcessingRun and the analytical graph. This synchronous capability has no GUI, progress reporting, cancellation UI, executable discovery, model management, or download support yet; future UI calls must run it outside the Qt main thread.
+
 ## Development setup
 
 Python 3.13 or newer is required. Create and activate a virtual environment:

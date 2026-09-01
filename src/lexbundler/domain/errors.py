@@ -84,3 +84,6 @@ class WhisperImportError(CorpusError):
 class WhisperCppFormatError(WhisperImportError):
     """Raised when a whisper.cpp JSON artifact lacks required valid data."""
 
+
+class WhisperExecutionError(CorpusError):
+    """Raised when whisper.cpp configuration or execution fails."""

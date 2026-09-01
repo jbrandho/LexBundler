@@ -7,6 +7,7 @@ from uuid import uuid4
 from lexbundler.application.corpus_service import CorpusService
 from lexbundler.application.text_segment_service import TextSegmentService
 from lexbundler.application.whisper_import_service import WhisperImportService
+from lexbundler.application.whisper_execution_service import WhisperExecutionService
 from lexbundler.domain.errors import (
     InvalidProjectMetadataError,
     ProjectAlreadyOpenError,
@@ -28,6 +29,9 @@ class ProjectService:
         self._whisper_import_service = WhisperImportService(
             self._corpus_service, self._text_segment_service
         )
+        self._whisper_execution_service = WhisperExecutionService(
+            self._corpus_service, self._whisper_import_service
+        )
 
     @property
     def corpus(self) -> CorpusService:
@@ -43,6 +47,11 @@ class ProjectService:
     def whisper_imports(self) -> WhisperImportService:
         """Return the manual whisper.cpp JSON import workflow."""
         return self._whisper_import_service
+
+    @property
+    def whisper_execution(self) -> WhisperExecutionService:
+        """Return the synchronous whisper.cpp execution workflow."""
+        return self._whisper_execution_service
 
     @property
     def current_project(self) -> ProjectMetadata | None:

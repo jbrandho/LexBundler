@@ -48,3 +48,6 @@
 - Raw tool segmentation must not be silently reinterpreted as sentences, utterances, or pedagogical units.
 - Parse and validate complete external artifacts before beginning derived-data persistence.
 - Importer-generated analytical graphs should be persisted atomically where practical.
+- Invoke external processes with explicit argument sequences, never shell command strings.
+- Durably preserve generated external-tool artifacts before removing temporary staging workspaces.
+- External-tool execution provenance and artifact-import provenance are distinct operations.

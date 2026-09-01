@@ -45,32 +45,67 @@ class WhisperImportService:
     ) -> WhisperImportResult:
         """Import a fully parsed artifact into one atomic analytical graph."""
         parsed = load_whisper_cpp_json(Path(json_path))
-        content, offsets = _flatten_segments(parsed)
-
         media_asset = self._corpus.register_local_asset(Path(media_path))
         json_asset = self._corpus.register_local_asset(
             Path(json_path), asset_kind="document", mime_type="application/json"
         )
+        return self._import_parsed(
+            parsed,
+            json_asset=json_asset,
+            media_asset=media_asset,
+            source_id=source_id,
+            source_unit_id=source_unit_id,
+            manual_bindings=(
+                ("asr_output", json_asset.id),
+                ("source_media", media_asset.id),
+            ),
+        )
+
+    def import_registered_json(
+        self,
+        json_path: Path,
+        *,
+        json_asset: Asset,
+        media_asset: Asset,
+        source_id: int,
+        source_unit_id: int | None = None,
+    ) -> WhisperImportResult:
+        """Normalize durable artifacts already registered by an execution workflow."""
+        parsed = load_whisper_cpp_json(Path(json_path))
+        return self._import_parsed(
+            parsed,
+            json_asset=json_asset,
+            media_asset=media_asset,
+            source_id=source_id,
+            source_unit_id=source_unit_id,
+            manual_bindings=(),
+        )
+
+    def _import_parsed(
+        self,
+        parsed: WhisperCppResult,
+        *,
+        json_asset: Asset,
+        media_asset: Asset,
+        source_id: int,
+        source_unit_id: int | None,
+        manual_bindings: tuple[tuple[str, int], ...],
+    ) -> WhisperImportResult:
+        content, offsets = _flatten_segments(parsed)
         run = self._corpus.start_processing_run(
             "import",
             tool_name="LexBundler",
             parameters=_run_parameters(parsed),
         )
         try:
-            self._bind_asset(
-                source_id,
-                source_unit_id,
-                json_asset.id,
-                role="asr_output",
-                run_id=run.id,
-            )
-            self._bind_asset(
-                source_id,
-                source_unit_id,
-                media_asset.id,
-                role="source_media",
-                run_id=run.id,
-            )
+            for role, asset_id in manual_bindings:
+                self._bind_manual_asset(
+                    source_id,
+                    source_unit_id,
+                    asset_id,
+                    role,
+                    run_id=run.id,
+                )
             items = tuple(
                 FlatSegmentSpec(
                     sequence=segment.index,
@@ -119,13 +154,13 @@ class WhisperImportService:
             graph=graph,
         )
 
-    def _bind_asset(
+    def _bind_manual_asset(
         self,
         source_id: int,
         source_unit_id: int | None,
         asset_id: int,
-        *,
         role: str,
+        *,
         run_id: int,
     ) -> None:
         arguments = {

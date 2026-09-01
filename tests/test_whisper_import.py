@@ -114,6 +114,9 @@ def test_import_maps_exact_text_media_assets_and_provenance(
     }
     assert all(binding.source_unit_id == unit.id for binding in bindings)
     assert all(binding.assignment_method == "manual_import" for binding in bindings)
+    assert all(
+        binding.processing_run_id == result.processing_run.id for binding in bindings
+    )
     assert result.processing_run.process_type == "import"
     assert result.processing_run.tool_name == "LexBundler"
     assert result.processing_run.tool_version is None
