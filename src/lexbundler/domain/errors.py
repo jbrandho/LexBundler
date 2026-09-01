@@ -91,3 +91,7 @@ class WhisperExecutionError(CorpusError):
 
 class MediaRenderError(CorpusError):
     """Raised when a durable derived-media rendering operation fails."""
+
+
+class AnkiExportError(CorpusError):
+    """Raised when a listening-deck export cannot be completed safely."""

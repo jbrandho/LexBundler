@@ -21,6 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
+    "genanki==0.13.1",
     "PySide6>=6.8",
 ]
 

@@ -2,7 +2,7 @@
 
 A desktop tool for building, aligning, and analyzing linguistic corpora from text and audio.
 
-LexBundler is in early development. It can manage project files, preserve source assets, import or produce whisper.cpp analysis, and render selected media spans as durable MP3 clips. Audio playback, alignment, broader import workflows, analysis, and exports are not yet implemented.
+LexBundler is in early development. It can manage project files, preserve source assets, import or produce whisper.cpp analysis, render selected media spans as durable MP3 clips, and package explicitly selected Chinese text/audio pairs as Anki listening cards. Audio playback, alignment, broader import workflows, and analysis are not yet implemented.
 
 ## Projects and persistence
 
@@ -61,7 +61,13 @@ Tool execution and normalization are recorded separately: whisper.cpp produces a
 
 The backend can invoke a caller-supplied ffmpeg executable to render a selected SegmentMediaSpan as a durable MP3. The generated clip is registered as a derived Asset and receives an additional `rendered_clip` MediaSpan on the same Segment; the original source Asset and MediaSpan remain unchanged. Optional pre/post padding changes the rendered file boundaries, while the new clip-relative span identifies only where the original linguistic segment occurs inside that padded file.
 
-Rendering is synchronous and backend-only. LexBundler does not discover or install ffmpeg, inspect media with ffprobe, provide rendering UI, or export Anki packages yet. The next planned vertical slice will consume explicitly selected material and rendered clips for Anki export.
+Rendering is synchronous and backend-only. LexBundler does not discover or install ffmpeg, inspect media with ffprobe, or provide rendering UI.
+
+## Anki listening-deck export
+
+The backend can pair caller-selected SegmentTextSpans with caller-selected `rendered_clip` SegmentMediaSpans and export them as a durable Anki `.apkg`. The Listening v1 card front contains only Chinese audio. Its answer shows the exact selected Simplified Chinese text, retains the front audio for replay, and includes unobtrusive source information. Pinyin and English fields are part of the stable note model but remain empty for now.
+
+Selection is entirely caller-supplied. LexBundler does not yet automatically select pedagogical material, generate Pinyin, translate text, or provide an Anki export UI; this is a narrow backend listening-comprehension path, not a curriculum generator.
 
 ## Development setup
 

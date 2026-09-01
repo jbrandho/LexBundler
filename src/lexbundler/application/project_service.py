@@ -2,8 +2,9 @@
 
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
+from lexbundler.application.anki_export_service import AnkiExportService
 from lexbundler.application.audio_clip_service import AudioClipService
 from lexbundler.application.corpus_service import CorpusService
 from lexbundler.application.text_segment_service import TextSegmentService
@@ -11,6 +12,7 @@ from lexbundler.application.whisper_import_service import WhisperImportService
 from lexbundler.application.whisper_execution_service import WhisperExecutionService
 from lexbundler.domain.errors import (
     InvalidProjectMetadataError,
+    NoOpenProjectError,
     ProjectAlreadyOpenError,
 )
 from lexbundler.domain.project import ProjectMetadata
@@ -35,6 +37,11 @@ class ProjectService:
         )
         self._audio_clip_service = AudioClipService(
             self._corpus_service, self._text_segment_service
+        )
+        self._anki_export_service = AnkiExportService(
+            self._corpus_service,
+            self._text_segment_service,
+            self._current_project_uuid,
         )
 
     @property
@@ -61,6 +68,11 @@ class ProjectService:
     def audio_clips(self) -> AudioClipService:
         """Return the synchronous durable audio-clip rendering workflow."""
         return self._audio_clip_service
+
+    @property
+    def anki_exports(self) -> AnkiExportService:
+        """Return the synchronous explicit listening-deck export workflow."""
+        return self._anki_export_service
 
     @property
     def current_project(self) -> ProjectMetadata | None:
@@ -125,6 +137,11 @@ class ProjectService:
             raise ProjectAlreadyOpenError(
                 "Close the current project before creating or opening another."
             )
+
+    def _current_project_uuid(self) -> UUID:
+        if self._current_store is None:
+            raise NoOpenProjectError("Open a project before exporting an Anki deck.")
+        return self._current_store.metadata.project_uuid
 
 
 def _optional_text(value: str | None) -> str | None:
