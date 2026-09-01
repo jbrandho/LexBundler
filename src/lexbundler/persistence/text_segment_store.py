@@ -5,6 +5,7 @@ from typing import Protocol
 
 from lexbundler.domain.corpus import JsonObject
 from lexbundler.domain.text_segments import (
+    FlatSegmentGraphSpec,
     Segment,
     SegmentLayer,
     SegmentMediaSpan,
@@ -12,10 +13,15 @@ from lexbundler.domain.text_segments import (
     SegmentTextSpan,
     Speaker,
     TextRepresentation,
+    TextSegmentGraph,
 )
 
 
 class TextSegmentStore(Protocol):
+    def create_flat_segment_graph(
+        self, spec: FlatSegmentGraphSpec, *, created_at: datetime
+    ) -> TextSegmentGraph: ...
+
     def create_text_representation(
         self,
         *,
@@ -135,4 +141,3 @@ class TextSegmentStore(Protocol):
     ) -> SegmentSpeaker: ...
 
     def list_segment_speakers(self, segment_id: int) -> list[SegmentSpeaker]: ...
-

@@ -2,7 +2,7 @@
 
 A desktop tool for building, aligning, and analyzing linguistic corpora from text and audio.
 
-LexBundler is in early development. It can currently create, validate, close, and reopen project files; corpus importing, audio, alignment, analysis, and export features are planned but not yet implemented.
+LexBundler is in early development. It can create, validate, close, and reopen project files and can manually import existing whisper.cpp JSON analysis. Audio playback, alignment, broader import workflows, analysis, and exports are not yet implemented.
 
 ## Projects and persistence
 
@@ -45,6 +45,12 @@ Schema v3 separates immutable evidence, textual interpretations, and analytical 
 
 Multiple representations and segmentation layers may coexist, and text or media spans may overlap. Segment hierarchy expresses analytical parentage rather than a non-overlapping interval partition. OCR, ASR, forced alignment, and NLP engines are not implemented yet.
 
+## Manual whisper.cpp JSON import
+
+LexBundler can normalize an already-existing whisper.cpp JSON file into the schema-v3 model through its application service. This is currently a backend workflow with no import UI, and LexBundler does not execute `whisper-cli` or perform ASR itself.
+
+The original JSON and source media remain immutable Assets. The JSON is retained as the direct evidence for one exact TextRepresentation; its raw transcription entries become an unreviewed ASR SegmentLayer with exact text and integer-millisecond media spans. Producer token arrays are deliberately not normalized into LexBundler records—the complete token output remains preserved in the original JSON Asset. Raw tool segments are not reinterpreted as sentences, utterances, speaker turns, or pedagogical units.
+
 ## Development setup
 
 Python 3.13 or newer is required. Create and activate a virtual environment:
@@ -78,4 +84,4 @@ pytest
 
 ## Planned workflow
 
-Future milestones will let users import text and audio sources, review source-derived utterances, align reviewed text with media, analyze the resulting corpus, and export selected results. These corpus capabilities are not implemented yet.
+Future milestones will add a user-facing import flow, let users review source-derived utterances, align reviewed text with media, analyze the resulting corpus, and export selected results. Those workflows are not implemented yet.

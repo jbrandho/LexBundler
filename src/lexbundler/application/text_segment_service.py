@@ -9,6 +9,7 @@ from lexbundler.domain.errors import (
     NoOpenProjectError,
 )
 from lexbundler.domain.text_segments import (
+    FlatSegmentGraphSpec,
     Segment,
     SegmentLayer,
     SegmentMediaSpan,
@@ -16,6 +17,7 @@ from lexbundler.domain.text_segments import (
     SegmentTextSpan,
     Speaker,
     TextRepresentation,
+    TextSegmentGraph,
 )
 from lexbundler.persistence.text_segment_store import TextSegmentStore
 
@@ -31,6 +33,30 @@ class TextSegmentService:
 
     def _detach(self) -> None:
         self._store = None
+
+    def create_flat_segment_graph(
+        self, spec: FlatSegmentGraphSpec
+    ) -> TextSegmentGraph:
+        """Atomically create one representation and an ordered flat segment layer."""
+        _required_text(spec.representation_kind, "Representation kind")
+        _required_text(spec.layer_name, "Layer name")
+        _required_text(spec.layer_kind, "Layer kind")
+        _required_text(spec.segment_kind, "Segment kind")
+        if not isinstance(spec.content, str):
+            raise InvalidCorpusDataError("Text content must be a Unicode string.")
+        for item in spec.segments:
+            _validate_range(item.media_start_ms, item.media_end_ms, "Media offsets")
+            if (item.text_start is None) != (item.text_end is None):
+                raise InvalidSpanError("Text span start and end must both be present.")
+            if item.text_start is not None and item.text_end is not None:
+                _validate_range(item.text_start, item.text_end, "Text offsets")
+                if item.text_end > len(spec.content):
+                    raise InvalidSpanError(
+                        "Text span ends beyond the graph representation."
+                    )
+        return self._require_store().create_flat_segment_graph(
+            spec, created_at=_now()
+        )
 
     def create_text_representation(
         self,
@@ -290,4 +316,3 @@ def _json_object(value: object) -> JsonObject:
 
 def _now() -> datetime:
     return datetime.now(UTC).replace(microsecond=0)
-

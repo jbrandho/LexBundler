@@ -43,3 +43,8 @@
 - Segment parentage is layer-local and does not imply exclusive interval containment.
 - Speakers are source-scoped and associate many-to-many with Segments.
 - Span-level provenance may differ from layer and segment provenance.
+- External-tool adapters parse producer-native formats into generic LexBundler concepts and must not depend on SQLite.
+- Preserve native external-tool artifacts as immutable Assets, including details not normalized into first-class records.
+- Raw tool segmentation must not be silently reinterpreted as sentences, utterances, or pedagogical units.
+- Parse and validate complete external artifacts before beginning derived-data persistence.
+- Importer-generated analytical graphs should be persisted atomically where practical.

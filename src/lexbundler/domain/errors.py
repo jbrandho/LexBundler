@@ -76,3 +76,11 @@ class CorpusStorageError(CorpusError):
 class InvalidSpanError(InvalidCorpusDataError):
     """Raised when a text or media range is malformed or out of bounds."""
 
+
+class WhisperImportError(CorpusError):
+    """Base class for manual whisper.cpp JSON import failures."""
+
+
+class WhisperCppFormatError(WhisperImportError):
+    """Raised when a whisper.cpp JSON artifact lacks required valid data."""
+

@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from lexbundler.application.corpus_service import CorpusService
 from lexbundler.application.text_segment_service import TextSegmentService
+from lexbundler.application.whisper_import_service import WhisperImportService
 from lexbundler.domain.errors import (
     InvalidProjectMetadataError,
     ProjectAlreadyOpenError,
@@ -24,6 +25,9 @@ class ProjectService:
         self._current_store: ProjectStore | None = None
         self._corpus_service = CorpusService()
         self._text_segment_service = TextSegmentService()
+        self._whisper_import_service = WhisperImportService(
+            self._corpus_service, self._text_segment_service
+        )
 
     @property
     def corpus(self) -> CorpusService:
@@ -34,6 +38,11 @@ class ProjectService:
     def text_segments(self) -> TextSegmentService:
         """Return text and segmentation operations for the current project."""
         return self._text_segment_service
+
+    @property
+    def whisper_imports(self) -> WhisperImportService:
+        """Return the manual whisper.cpp JSON import workflow."""
+        return self._whisper_import_service
 
     @property
     def current_project(self) -> ProjectMetadata | None:

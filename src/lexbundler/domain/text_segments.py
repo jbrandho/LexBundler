@@ -99,3 +99,44 @@ class SegmentSpeaker:
     metadata: JsonObject
     created_at: datetime
 
+
+@dataclass(frozen=True, slots=True)
+class FlatSegmentSpec:
+    """One ordered item in an atomic, flat text/media segmentation graph."""
+
+    sequence: int
+    external_id: str | None
+    text_start: int | None
+    text_end: int | None
+    media_asset_id: int
+    media_start_ms: int
+    media_end_ms: int
+
+
+@dataclass(frozen=True, slots=True)
+class FlatSegmentGraphSpec:
+    source_id: int
+    source_unit_id: int | None
+    representation_kind: str
+    language_tag: str | None
+    content: str
+    source_asset_id: int | None
+    created_by_run_id: int | None
+    representation_metadata: JsonObject
+    layer_name: str
+    layer_kind: str
+    layer_metadata: JsonObject
+    segment_kind: str
+    text_span_role: str | None
+    media_span_role: str | None
+    segments: tuple[FlatSegmentSpec, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class TextSegmentGraph:
+    representation: TextRepresentation
+    layer: SegmentLayer
+    segments: tuple[Segment, ...]
+    text_spans: tuple[SegmentTextSpan, ...]
+    media_spans: tuple[SegmentMediaSpan, ...]
+
