@@ -1,20 +1,17 @@
 """LexBundler's main application window and thin lifecycle UI."""
 
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
-    QLabel,
     QMainWindow,
     QMessageBox,
-    QVBoxLayout,
-    QWidget,
 )
 
 from lexbundler.application.project_service import ProjectService
 from lexbundler.domain.errors import ProjectError
 from lexbundler.ui.project_dialog import NewProjectDialog, PROJECT_FILTER
+from lexbundler.ui.alignment_review_widget import AlignmentReviewWidget
 
 
 class MainWindow(QMainWindow):
@@ -46,21 +43,8 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(quit_action)
 
-        title = QLabel("LexBundler")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        description = QLabel("Build, align, and analyze linguistic corpora.")
-        description.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        layout = QVBoxLayout()
-        layout.addStretch()
-        layout.addWidget(title)
-        layout.addWidget(description)
-        layout.addStretch()
-
-        central_widget = QWidget()
-        central_widget.setLayout(layout)
-        self.setCentralWidget(central_widget)
+        self.review_widget = AlignmentReviewWidget(project_service.alignment_review)
+        self.setCentralWidget(self.review_widget)
         self._refresh_project_state()
 
     def _new_project(self) -> None:
@@ -105,13 +89,16 @@ class MainWindow(QMainWindow):
         if project is None:
             self.setWindowTitle("LexBundler")
             self.statusBar().clearMessage()
+            self.review_widget.clear()
         else:
             self.setWindowTitle(f"LexBundler — {project.name}")
             self.statusBar().showMessage(project.name)
+            self.review_widget.refresh()
 
     def _show_project_error(self, title: str, error: ProjectError) -> None:
         QMessageBox.critical(self, title, str(error))
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 (Qt API)
+        self.review_widget.clear()
         self._project_service.close_project()
         event.accept()

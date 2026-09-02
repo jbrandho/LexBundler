@@ -79,6 +79,19 @@ The backend can pair caller-selected SegmentTextSpans with caller-selected `rend
 
 Selection is entirely caller-supplied. LexBundler does not yet automatically select pedagogical material, generate Pinyin, translate text, or provide an Anki export UI; this is a narrow backend listening-comprehension path, not a curriculum generator.
 
+## Read-only alignment review
+
+The desktop review workspace consumes immutable application-level projections; Qt
+widgets do not reconstruct joins or access SQLite. It browses sources and source
+units, shows exact authoritative transcript lines, and projects matching MFA word
+timing evidence onto each line. Authoritative linguistic line segmentation and MFA
+acoustic word segmentation remain distinct layers.
+
+Speech and preview playback ranges are calculated at read time from lexical MFA
+media spans. Silence-aware study padding and wider context bounds are provisional
+playback values only: they are not persisted as reviewed or pedagogical boundaries.
+Boundary editing, review, and approval remain separate future workflows.
+
 ## Development setup
 
 Python 3.13 or newer is required. Create and activate a virtual environment:
@@ -112,4 +125,5 @@ pytest
 
 ## Planned workflow
 
-Future milestones will add a user-facing import flow, let users review source-derived utterances, align reviewed text with media, analyze the resulting corpus, and export selected results. Those workflows are not implemented yet.
+Future milestones will add user-facing import and execution flows, boundary review,
+corpus analysis, and export controls. The current alignment workspace is read-only.

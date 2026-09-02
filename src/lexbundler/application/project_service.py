@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from lexbundler.application.anki_export_service import AnkiExportService
+from lexbundler.application.alignment_review_service import AlignmentReviewService
 from lexbundler.application.audio_clip_service import AudioClipService
 from lexbundler.application.corpus_service import CorpusService
 from lexbundler.application.forced_alignment_service import ForcedAlignmentService
@@ -56,6 +57,9 @@ class ProjectService:
             self._text_segment_service,
             self._current_project_uuid,
         )
+        self._alignment_review_service = AlignmentReviewService(
+            self._corpus_service, self._text_segment_service
+        )
 
     @property
     def corpus(self) -> CorpusService:
@@ -101,6 +105,11 @@ class ProjectService:
     def anki_exports(self) -> AnkiExportService:
         """Return the synchronous explicit listening-deck export workflow."""
         return self._anki_export_service
+
+    @property
+    def alignment_review(self) -> AlignmentReviewService:
+        """Return the read-only alignment-review projection service."""
+        return self._alignment_review_service
 
     @property
     def current_project(self) -> ProjectMetadata | None:

@@ -61,3 +61,8 @@
 - MFA execution uses a caller-configured executable; LexBundler does not manage environments, installations, or models.
 - Materialize the exact authoritative TextRepresentation temporarily when an external aligner requires a transcript file.
 - Validate and durably publish native external-tool output before beginning its separate normalization import.
+- Review UI consumes application-level projections rather than persistence objects.
+- Authoritative transcript segmentation and MFA timing evidence remain distinct.
+- Read-only playback spans may be derived from alignment evidence without persisting them.
+- Preview bounds are provisional and must not be persisted as reviewed boundaries.
+- Boundary review and approval remain separate future workflows.
