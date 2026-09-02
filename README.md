@@ -92,6 +92,18 @@ media spans. Silence-aware study padding and wider context bounds are provisiona
 playback values only: they are not persisted as reviewed or pedagogical boundaries.
 Boundary editing, review, and approval remain separate future workflows.
 
+The waveform is a bounded, transient projection decoded from immutable source media;
+it is not canonical project data. Editable proposed clip boundaries are likewise
+in-memory review state. They remain distinct from immutable MFA evidence, and only
+an explicit future approval workflow may persist reviewed pedagogical boundaries.
+Waveform extraction invokes `ffmpeg` from `PATH` asynchronously and decodes only the
+visible window to reduced-rate mono analysis PCM; source-audio playback remains Qt.
+
+Source hierarchy is also distinct from future user-defined organizational
+collections. Assets retain their independent content identity and attach to the
+source hierarchy through roles and bindings; navigation alone does not justify a
+collection model.
+
 ## Development setup
 
 Python 3.13 or newer is required. Create and activate a virtual environment:

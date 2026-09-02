@@ -7,6 +7,7 @@ from lexbundler.application.project_service import ProjectService
 from lexbundler.application.alignment_review_service import (
     ReviewAlignment, ReviewSelection, ReviewSource, ReviewUtterance, ReviewWord,
 )
+from lexbundler.application.waveform import WaveformBucket, WaveformWindow
 from lexbundler.persistence.sqlite import SQLiteProjectStoreFactory
 from lexbundler.ui.alignment_review_widget import AlignmentReviewWidget
 
@@ -25,6 +26,22 @@ class FakePlayback(QObject):
 
     def play(self, path, interval):
         self.play_calls.append((path, interval))
+
+
+class FakeWaveformLoader(QObject):
+    loaded = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self):
+        super().__init__()
+        self.requests = []
+        self.cancel_calls = 0
+
+    def request(self, **request):
+        self.requests.append(request)
+
+    def cancel(self):
+        self.cancel_calls += 1
 
 
 def _project(tmp_path: Path):
@@ -94,15 +111,28 @@ def test_widget_shows_words_enables_playback_and_requests_stop_on_selection(
             return ReviewSelection((ReviewAlignment(8, "MFA"),), 8, (first, second))
 
     playback = FakePlayback()
-    widget = AlignmentReviewWidget(Projection(), playback)
+    loader = FakeWaveformLoader()
+    widget = AlignmentReviewWidget(Projection(), playback, loader)
     widget.refresh()
 
     assert widget.word_model.rowCount() == 1
     assert widget.speech_button.isEnabled()
+    assert widget.timing_label.text() == "MFA speech: 0.100 – 0.400 s"
+    assert widget.proposed_timing_label.text() == "Proposed clip: 0.050 – 0.500 s"
+    assert loader.requests[-1]["start_ms"] == 0
+    assert loader.requests[-1]["end_ms"] == 1400
+    loader.loaded.emit(WaveformWindow(
+        3, audio, 0, 1400, (WaveformBucket(-0.5, 0.5),)
+    ))
+    widget._start_nudges[1][-1].click()
     widget.study_button.click()
-    assert playback.play_calls[-1][1].start_ms == 50
+    assert (playback.play_calls[-1][1].start_ms,
+            playback.play_calls[-1][1].end_ms) == (100, 500)
+    widget.reset_button.click()
+    assert widget.proposed_timing_label.text() == "Proposed clip: 0.050 – 0.500 s"
     stopped = playback.stop_calls
     widget.transcript_list.setCurrentIndex(widget.transcript_model.index(1, 0))
     assert playback.stop_calls > stopped
     assert widget.text_label.text() == "再见"
+    assert widget.proposed_timing_label.text() == "Proposed clip: 0.550 – 1.000 s"
     widget.close()

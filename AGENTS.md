@@ -66,3 +66,8 @@
 - Read-only playback spans may be derived from alignment evidence without persisting them.
 - Preview bounds are provisional and must not be persisted as reviewed boundaries.
 - Boundary review and approval remain separate future workflows.
+- MFA evidence and pedagogical boundaries are distinct; provisional review boundaries are transient.
+- Only an explicit future approval workflow may persist reviewed pedagogical boundaries.
+- Waveform visualization is a bounded media projection, not canonical project data.
+- Source hierarchy and user-defined organizational collections are separate concepts.
+- Assets remain independently identified and attach to source hierarchy through roles and bindings.
