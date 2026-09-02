@@ -85,6 +85,22 @@ class WhisperCppFormatError(WhisperImportError):
     """Raised when a whisper.cpp JSON artifact lacks required valid data."""
 
 
+class TranscriptImportError(CorpusError):
+    """Raised when an authoritative transcript cannot be imported."""
+
+
+class MfaImportError(CorpusError):
+    """Base class for manual MFA artifact import failures."""
+
+
+class MfaFormatError(MfaImportError):
+    """Raised when an MFA HF JSON artifact is malformed."""
+
+
+class MfaTextMismatchError(MfaImportError):
+    """Raised when lexical alignment labels do not match authoritative text."""
+
+
 class WhisperExecutionError(CorpusError):
     """Raised when whisper.cpp configuration or execution fails."""
 

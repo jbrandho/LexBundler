@@ -10,6 +10,8 @@ from lexbundler.domain.errors import (
     InvalidSpanError,
 )
 from lexbundler.domain.text_segments import (
+    AlignmentGraph,
+    AlignmentGraphSpec,
     FlatSegmentGraphSpec,
     FlatSegmentSpec,
     Segment,
@@ -19,6 +21,7 @@ from lexbundler.domain.text_segments import (
     SegmentTextSpan,
     Speaker,
     TextRepresentation,
+    TextOnlySegmentGraphSpec,
     TextSegmentGraph,
 )
 from lexbundler.persistence.sqlite.serialization import (
@@ -28,6 +31,73 @@ from lexbundler.persistence.sqlite.serialization import (
     parse_utc,
 )
 from lexbundler.persistence.sqlite.store_base import SQLiteStoreBase
+
+
+def _insert_layer(
+    connection: sqlite3.Connection, *, source_id: int,
+    source_unit_id: int | None, name: str, layer_kind: str,
+    language_tag: str | None, created_by_run_id: int | None,
+    metadata: JsonObject, timestamp: str,
+) -> SegmentLayer:
+    cursor = connection.execute(
+        """INSERT INTO segment_layer (
+            source_id, source_unit_id, name, layer_kind, language_tag,
+            created_by_run_id, metadata_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (source_id, source_unit_id, name, layer_kind, language_tag,
+         created_by_run_id, dump_json(metadata), timestamp),
+    )
+    return _layer_from_row(_row_by_id(connection, "segment_layer", cursor.lastrowid))
+
+
+def _insert_segment(
+    connection: sqlite3.Connection, *, layer_id: int, kind: str,
+    label: str | None, sequence: int, created_by_run_id: int | None,
+    timestamp: str,
+) -> Segment:
+    cursor = connection.execute(
+        """INSERT INTO segment (
+            layer_id, parent_id, kind, label, sequence, external_id,
+            confidence, created_by_run_id, metadata_json, created_at
+        ) VALUES (?, NULL, ?, ?, ?, NULL, NULL, ?, '{}', ?)""",
+        (layer_id, kind, label, sequence, created_by_run_id, timestamp),
+    )
+    return _segment_from_row(_row_by_id(connection, "segment", cursor.lastrowid))
+
+
+def _insert_text_span(
+    connection: sqlite3.Connection, *, segment_id: int,
+    representation_id: int, start: int, end: int, role: str | None,
+    created_by_run_id: int | None, timestamp: str,
+) -> SegmentTextSpan:
+    cursor = connection.execute(
+        """INSERT INTO segment_text_span (
+            segment_id, text_representation_id, start_offset, end_offset,
+            role, confidence, created_by_run_id, metadata_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, NULL, ?, '{}', ?)""",
+        (segment_id, representation_id, start, end, role,
+         created_by_run_id, timestamp),
+    )
+    return _text_span_from_row(
+        _row_by_id(connection, "segment_text_span", cursor.lastrowid)
+    )
+
+
+def _insert_media_span(
+    connection: sqlite3.Connection, *, segment_id: int, asset_id: int,
+    start: int, end: int, role: str | None,
+    created_by_run_id: int | None, timestamp: str,
+) -> SegmentMediaSpan:
+    cursor = connection.execute(
+        """INSERT INTO segment_media_span (
+            segment_id, asset_id, start_ms, end_ms, role, confidence,
+            created_by_run_id, metadata_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, NULL, ?, '{}', ?)""",
+        (segment_id, asset_id, start, end, role, created_by_run_id, timestamp),
+    )
+    return _media_span_from_row(
+        _row_by_id(connection, "segment_media_span", cursor.lastrowid)
+    )
 
 
 def _insert_flat_segment(
@@ -111,6 +181,115 @@ def _insert_flat_segment(
 
 class SQLiteTextSegmentStore(SQLiteStoreBase):
     """Focused SQLite operations for immutable text and segmentation."""
+
+    def create_text_only_segment_graph(
+        self, spec: TextOnlySegmentGraphSpec, *, created_at: datetime
+    ) -> TextSegmentGraph:
+        timestamp = format_utc(created_at)
+        with self._connection(write=True) as connection:
+            representation_cursor = connection.execute(
+                """
+                INSERT INTO text_representation (
+                    source_id, source_unit_id, representation_kind, language_tag,
+                    content, source_asset_id, derived_from_id, created_by_run_id,
+                    metadata_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+                """,
+                (
+                    spec.source_id, spec.source_unit_id, spec.representation_kind,
+                    spec.language_tag, spec.content, spec.source_asset_id,
+                    spec.created_by_run_id, dump_json(spec.representation_metadata),
+                    timestamp,
+                ),
+            )
+            representation = _text_representation_from_row(
+                _row_by_id(connection, "text_representation", representation_cursor.lastrowid)
+            )
+            layer = _insert_layer(
+                connection, source_id=spec.source_id,
+                source_unit_id=spec.source_unit_id, name=spec.layer_name,
+                layer_kind=spec.layer_kind, language_tag=spec.language_tag,
+                created_by_run_id=spec.created_by_run_id,
+                metadata=spec.layer_metadata, timestamp=timestamp,
+            )
+            segments: list[Segment] = []
+            spans: list[SegmentTextSpan] = []
+            for item in spec.segments:
+                segment = _insert_segment(
+                    connection, layer_id=layer.id, kind=spec.segment_kind,
+                    label=None, sequence=item.sequence,
+                    created_by_run_id=spec.created_by_run_id, timestamp=timestamp,
+                )
+                span = _insert_text_span(
+                    connection, segment_id=segment.id,
+                    representation_id=representation.id,
+                    start=item.start_offset, end=item.end_offset,
+                    role=spec.text_span_role,
+                    created_by_run_id=spec.created_by_run_id, timestamp=timestamp,
+                )
+                segments.append(segment)
+                spans.append(span)
+            return TextSegmentGraph(
+                representation, layer, tuple(segments), tuple(spans), ()
+            )
+
+    def create_alignment_graph(
+        self, spec: AlignmentGraphSpec, *, created_at: datetime
+    ) -> AlignmentGraph:
+        timestamp = format_utc(created_at)
+        with self._connection(write=True) as connection:
+            representation = _row_by_id(
+                connection, "text_representation", spec.text_representation_id
+            )
+            if representation["source_id"] != spec.source_id:
+                raise CorpusIntegrityError(
+                    "Alignment representation and layers must share a source."
+                )
+            _row_by_id(connection, "asset", spec.media_asset_id)
+            layers: list[SegmentLayer] = []
+            segments: list[Segment] = []
+            text_spans: list[SegmentTextSpan] = []
+            media_spans: list[SegmentMediaSpan] = []
+            for layer_spec in spec.layers:
+                layer = _insert_layer(
+                    connection, source_id=spec.source_id,
+                    source_unit_id=spec.source_unit_id, name=layer_spec.name,
+                    layer_kind=layer_spec.layer_kind,
+                    language_tag=spec.language_tag,
+                    created_by_run_id=spec.created_by_run_id,
+                    metadata=layer_spec.metadata, timestamp=timestamp,
+                )
+                layers.append(layer)
+                for item in layer_spec.segments:
+                    segment = _insert_segment(
+                        connection, layer_id=layer.id, kind=layer_spec.segment_kind,
+                        label=item.label, sequence=item.sequence,
+                        created_by_run_id=spec.created_by_run_id, timestamp=timestamp,
+                    )
+                    segments.append(segment)
+                    if item.text_start is not None and item.text_end is not None:
+                        if item.text_end > len(representation["content"]):
+                            raise InvalidSpanError(
+                                "Text span ends beyond the referenced representation."
+                            )
+                        text_spans.append(_insert_text_span(
+                            connection, segment_id=segment.id,
+                            representation_id=spec.text_representation_id,
+                            start=item.text_start, end=item.text_end,
+                            role=spec.text_span_role,
+                            created_by_run_id=spec.created_by_run_id,
+                            timestamp=timestamp,
+                        ))
+                    media_spans.append(_insert_media_span(
+                        connection, segment_id=segment.id,
+                        asset_id=spec.media_asset_id, start=item.start_ms,
+                        end=item.end_ms, role=spec.media_span_role,
+                        created_by_run_id=spec.created_by_run_id,
+                        timestamp=timestamp,
+                    ))
+            return AlignmentGraph(
+                tuple(layers), tuple(segments), tuple(text_spans), tuple(media_spans)
+            )
 
     def create_flat_segment_graph(
         self, spec: FlatSegmentGraphSpec, *, created_at: datetime

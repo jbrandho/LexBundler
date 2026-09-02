@@ -53,3 +53,8 @@
 - External-tool execution provenance and artifact-import provenance are distinct operations.
 - Derived media must coexist with original evidence; padding or other artifact boundaries must not silently redefine the underlying analytical Segment.
 - Learning-card identity remains stable across replaceable derived media or enrichment data when the underlying learning task is unchanged.
+- Authoritative transcripts define linguistic text; ASR and forced alignment remain distinct derived evidence.
+- MFA word tokenization is an acoustic-alignment detail, not canonical linguistic tokenization.
+- Preserve native MFA JSON before normalization, including word-tier `<eps>` and phone-tier `sil` evidence.
+- Convert external alignment seconds to integer milliseconds with `round(seconds * 1000)`, never truncation.
+- Manual MFA artifact import and automated MFA execution are separate workflows and provenance events.

@@ -7,7 +7,9 @@ from uuid import UUID, uuid4
 from lexbundler.application.anki_export_service import AnkiExportService
 from lexbundler.application.audio_clip_service import AudioClipService
 from lexbundler.application.corpus_service import CorpusService
+from lexbundler.application.mfa_import_service import MfaImportService
 from lexbundler.application.text_segment_service import TextSegmentService
+from lexbundler.application.transcript_import_service import TranscriptImportService
 from lexbundler.application.whisper_import_service import WhisperImportService
 from lexbundler.application.whisper_execution_service import WhisperExecutionService
 from lexbundler.domain.errors import (
@@ -30,6 +32,12 @@ class ProjectService:
         self._corpus_service = CorpusService()
         self._text_segment_service = TextSegmentService()
         self._whisper_import_service = WhisperImportService(
+            self._corpus_service, self._text_segment_service
+        )
+        self._transcript_import_service = TranscriptImportService(
+            self._corpus_service, self._text_segment_service
+        )
+        self._mfa_import_service = MfaImportService(
             self._corpus_service, self._text_segment_service
         )
         self._whisper_execution_service = WhisperExecutionService(
@@ -58,6 +66,16 @@ class ProjectService:
     def whisper_imports(self) -> WhisperImportService:
         """Return the manual whisper.cpp JSON import workflow."""
         return self._whisper_import_service
+
+    @property
+    def transcript_imports(self) -> TranscriptImportService:
+        """Return the authoritative UTF-8 transcript import workflow."""
+        return self._transcript_import_service
+
+    @property
+    def mfa_imports(self) -> MfaImportService:
+        """Return the manual MFA HF JSON import workflow."""
+        return self._mfa_import_service
 
     @property
     def whisper_execution(self) -> WhisperExecutionService:

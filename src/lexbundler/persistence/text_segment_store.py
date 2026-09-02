@@ -5,6 +5,8 @@ from typing import Protocol
 
 from lexbundler.domain.corpus import JsonObject
 from lexbundler.domain.text_segments import (
+    AlignmentGraph,
+    AlignmentGraphSpec,
     FlatSegmentGraphSpec,
     Segment,
     SegmentLayer,
@@ -13,11 +15,20 @@ from lexbundler.domain.text_segments import (
     SegmentTextSpan,
     Speaker,
     TextRepresentation,
+    TextOnlySegmentGraphSpec,
     TextSegmentGraph,
 )
 
 
 class TextSegmentStore(Protocol):
+    def create_text_only_segment_graph(
+        self, spec: TextOnlySegmentGraphSpec, *, created_at: datetime
+    ) -> TextSegmentGraph: ...
+
+    def create_alignment_graph(
+        self, spec: AlignmentGraphSpec, *, created_at: datetime
+    ) -> AlignmentGraph: ...
+
     def create_flat_segment_graph(
         self, spec: FlatSegmentGraphSpec, *, created_at: datetime
     ) -> TextSegmentGraph: ...

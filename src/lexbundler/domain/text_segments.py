@@ -140,3 +140,67 @@ class TextSegmentGraph:
     text_spans: tuple[SegmentTextSpan, ...]
     media_spans: tuple[SegmentMediaSpan, ...]
 
+
+@dataclass(frozen=True, slots=True)
+class TextOnlySegmentSpec:
+    sequence: int
+    start_offset: int
+    end_offset: int
+
+
+@dataclass(frozen=True, slots=True)
+class TextOnlySegmentGraphSpec:
+    source_id: int
+    source_unit_id: int | None
+    representation_kind: str
+    language_tag: str | None
+    content: str
+    source_asset_id: int
+    created_by_run_id: int
+    representation_metadata: JsonObject
+    layer_name: str
+    layer_kind: str
+    layer_metadata: JsonObject
+    segment_kind: str
+    text_span_role: str | None
+    segments: tuple[TextOnlySegmentSpec, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class AlignmentSegmentSpec:
+    sequence: int
+    label: str
+    start_ms: int
+    end_ms: int
+    text_start: int | None = None
+    text_end: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AlignmentLayerSpec:
+    name: str
+    layer_kind: str
+    segment_kind: str
+    metadata: JsonObject
+    segments: tuple[AlignmentSegmentSpec, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class AlignmentGraphSpec:
+    source_id: int
+    source_unit_id: int | None
+    text_representation_id: int
+    media_asset_id: int
+    language_tag: str | None
+    created_by_run_id: int
+    text_span_role: str | None
+    media_span_role: str | None
+    layers: tuple[AlignmentLayerSpec, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class AlignmentGraph:
+    layers: tuple[SegmentLayer, ...]
+    segments: tuple[Segment, ...]
+    text_spans: tuple[SegmentTextSpan, ...]
+    media_spans: tuple[SegmentMediaSpan, ...]

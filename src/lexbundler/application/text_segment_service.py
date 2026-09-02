@@ -9,6 +9,8 @@ from lexbundler.domain.errors import (
     NoOpenProjectError,
 )
 from lexbundler.domain.text_segments import (
+    AlignmentGraph,
+    AlignmentGraphSpec,
     FlatSegmentGraphSpec,
     Segment,
     SegmentLayer,
@@ -17,6 +19,7 @@ from lexbundler.domain.text_segments import (
     SegmentTextSpan,
     Speaker,
     TextRepresentation,
+    TextOnlySegmentGraphSpec,
     TextSegmentGraph,
 )
 from lexbundler.persistence.text_segment_store import TextSegmentStore
@@ -24,6 +27,38 @@ from lexbundler.persistence.text_segment_store import TextSegmentStore
 
 class TextSegmentService:
     """Coordinate text and segmentation operations for the open project."""
+
+    def create_text_only_segment_graph(
+        self, spec: TextOnlySegmentGraphSpec
+    ) -> TextSegmentGraph:
+        _required_text(spec.representation_kind, "Representation kind")
+        _required_text(spec.layer_name, "Layer name")
+        _required_text(spec.layer_kind, "Layer kind")
+        _required_text(spec.segment_kind, "Segment kind")
+        if not isinstance(spec.content, str):
+            raise InvalidCorpusDataError("Text content must be a Unicode string.")
+        for item in spec.segments:
+            _validate_range(item.start_offset, item.end_offset, "Text offsets")
+            if item.end_offset > len(spec.content):
+                raise InvalidSpanError("Text span ends beyond the graph representation.")
+        return self._require_store().create_text_only_segment_graph(
+            spec, created_at=_now()
+        )
+
+    def create_alignment_graph(self, spec: AlignmentGraphSpec) -> AlignmentGraph:
+        for layer in spec.layers:
+            _required_text(layer.name, "Layer name")
+            _required_text(layer.layer_kind, "Layer kind")
+            _required_text(layer.segment_kind, "Segment kind")
+            for item in layer.segments:
+                if not isinstance(item.label, str):
+                    raise InvalidCorpusDataError("Alignment label must be text.")
+                _validate_range(item.start_ms, item.end_ms, "Media offsets")
+                if (item.text_start is None) != (item.text_end is None):
+                    raise InvalidSpanError("Text span start and end must both be present.")
+                if item.text_start is not None and item.text_end is not None:
+                    _validate_range(item.text_start, item.text_end, "Text offsets")
+        return self._require_store().create_alignment_graph(spec, created_at=_now())
 
     def __init__(self) -> None:
         self._store: TextSegmentStore | None = None
