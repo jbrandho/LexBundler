@@ -58,3 +58,6 @@
 - Preserve native MFA JSON before normalization, including word-tier `<eps>` and phone-tier `sil` evidence.
 - Convert external alignment seconds to integer milliseconds with `round(seconds * 1000)`, never truncation.
 - Manual MFA artifact import and automated MFA execution are separate workflows and provenance events.
+- MFA execution uses a caller-configured executable; LexBundler does not manage environments, installations, or models.
+- Materialize the exact authoritative TextRepresentation temporarily when an external aligner requires a transcript file.
+- Validate and durably publish native external-tool output before beginning its separate normalization import.

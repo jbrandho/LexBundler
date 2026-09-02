@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from lexbundler.application.anki_export_service import AnkiExportService
 from lexbundler.application.audio_clip_service import AudioClipService
 from lexbundler.application.corpus_service import CorpusService
+from lexbundler.application.forced_alignment_service import ForcedAlignmentService
 from lexbundler.application.mfa_import_service import MfaImportService
 from lexbundler.application.text_segment_service import TextSegmentService
 from lexbundler.application.transcript_import_service import TranscriptImportService
@@ -39,6 +40,10 @@ class ProjectService:
         )
         self._mfa_import_service = MfaImportService(
             self._corpus_service, self._text_segment_service
+        )
+        self._forced_alignment_service = ForcedAlignmentService(
+            self._corpus_service, self._text_segment_service,
+            self._mfa_import_service,
         )
         self._whisper_execution_service = WhisperExecutionService(
             self._corpus_service, self._whisper_import_service
@@ -76,6 +81,11 @@ class ProjectService:
     def mfa_imports(self) -> MfaImportService:
         """Return the manual MFA HF JSON import workflow."""
         return self._mfa_import_service
+
+    @property
+    def forced_alignments(self) -> ForcedAlignmentService:
+        """Return configured external MFA execution and import operations."""
+        return self._forced_alignment_service
 
     @property
     def whisper_execution(self) -> WhisperExecutionService:

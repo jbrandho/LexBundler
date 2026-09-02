@@ -2,7 +2,7 @@
 
 A desktop tool for building, aligning, and analyzing linguistic corpora from text and audio.
 
-LexBundler is in early development. It can manage project files, preserve source assets, import authoritative UTF-8 transcripts and existing MFA alignments, import or produce whisper.cpp analysis, render selected media spans as durable MP3 clips, and package explicitly selected Chinese text/audio pairs as Anki listening cards. Audio playback, alignment review, broader import workflows, and analysis are not yet implemented.
+LexBundler is in early development. It can manage project files, preserve source assets, import authoritative UTF-8 transcripts, import or produce MFA and whisper.cpp analysis, render selected media spans as durable MP3 clips, and package explicitly selected Chinese text/audio pairs as Anki listening cards. Audio playback, alignment review, broader import workflows, and analysis are not yet implemented.
 
 ## Projects and persistence
 
@@ -55,9 +55,11 @@ The original JSON and source media remain immutable Assets. The JSON is retained
 
 The backend can import an existing UTF-8 transcript as authoritative source text without normalizing its Unicode, punctuation, whitespace, or line endings. The TXT file remains an immutable Asset, and the exact decoded string becomes an immutable TextRepresentation distinct from ASR. When explicitly requested, each non-empty source line also becomes a segment whose text span excludes only its line terminator; this is a narrow import option, not a global claim that lines are linguistic units.
 
-LexBundler can also import already-produced Montreal Forced Aligner 3.4 HF JSON against an explicitly selected media Asset and authoritative TextRepresentation. It does not invoke MFA in this workflow. The native JSON is preserved, while word and phone tiers become separate derived timing layers. Word labels are acoustic alignment units rather than canonical linguistic tokens: lexical labels are matched sequentially to exact authoritative text spans while intervening Unicode punctuation and whitespace are skipped, and mismatches fail instead of rewriting authoritative text. Silence labels (`<eps>` and `sil`) remain explicit timing segments. Phone labels are retained as generic segment labels and are never attached to invented character spans.
+LexBundler can also import already-produced Montreal Forced Aligner 3.4 HF JSON against an explicitly selected media Asset and authoritative TextRepresentation. The native JSON is preserved, while word and phone tiers become separate derived timing layers. Word labels are acoustic alignment units rather than canonical linguistic tokens: lexical labels are matched sequentially to exact authoritative text spans while intervening Unicode punctuation and whitespace are skipped, and mismatches fail instead of rewriting authoritative text. Silence labels (`<eps>` and `sil`) remain explicit timing segments. Phone labels are retained as generic segment labels and are never attached to invented character spans.
 
-MFA seconds are converted to canonical integer milliseconds with `round(seconds * 1000)`. Automated MFA execution, environment/model management, and media preparation are deferred to M0.10.
+MFA seconds are converted to canonical integer milliseconds with `round(seconds * 1000)`.
+
+The backend can execute a caller-configured MFA executable using `align_one_hf`; LexBundler does not discover or manage Conda environments, MFA installations, models, downloads, or authentication. The caller explicitly selects the media Asset and authoritative TextRepresentation. LexBundler materializes the exact stored text temporarily as UTF-8, validates MFA's staged native JSON, publishes it exclusively to the caller's durable path, and preserves it as an Asset before invoking the existing normalization workflow. External MFA execution and LexBundler normalization are separate ProcessingRuns with independent success or failure provenance.
 
 ## whisper.cpp execution foundation
 

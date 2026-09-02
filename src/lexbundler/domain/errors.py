@@ -101,6 +101,10 @@ class MfaTextMismatchError(MfaImportError):
     """Raised when lexical alignment labels do not match authoritative text."""
 
 
+class MfaExecutionError(CorpusError):
+    """Raised when configured MFA execution cannot produce a valid artifact."""
+
+
 class WhisperExecutionError(CorpusError):
     """Raised when whisper.cpp configuration or execution fails."""
 

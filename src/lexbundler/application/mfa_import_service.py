@@ -43,9 +43,40 @@ class MfaImportService:
         source_unit_id: int | None = None,
     ) -> MfaImportResult:
         parsed = load_mfa_hf_json(Path(json_path))
+        json_asset = self._corpus.register_local_asset(
+            Path(json_path), asset_kind="document", mime_type="application/json"
+        )
+        return self._import_parsed(
+            parsed, json_asset=json_asset, media_asset=media_asset,
+            authoritative_text=authoritative_text, source_id=source_id,
+            source_unit_id=source_unit_id,
+            manual_bindings=(("forced_alignment_output", json_asset.id),
+                             ("aligned_media", media_asset.id)),
+        )
+
+    def import_registered_json(
+        self, json_path: Path, *, json_asset: Asset, media_asset: Asset,
+        authoritative_text: TextRepresentation, source_id: int,
+        source_unit_id: int | None = None,
+    ) -> MfaImportResult:
+        """Normalize an artifact already preserved by an execution workflow."""
+        parsed = load_mfa_hf_json(Path(json_path))
+        return self._import_parsed(
+            parsed, json_asset=json_asset, media_asset=media_asset,
+            authoritative_text=authoritative_text, source_id=source_id,
+            source_unit_id=source_unit_id, manual_bindings=(),
+        )
+
+    def _import_parsed(
+        self, parsed: MfaHfResult, *, json_asset: Asset, media_asset: Asset,
+        authoritative_text: TextRepresentation, source_id: int,
+        source_unit_id: int | None,
+        manual_bindings: tuple[tuple[str, int], ...],
+    ) -> MfaImportResult:
         stored_media = self._corpus.get_asset(media_asset.id)
+        stored_json = self._corpus.get_asset(json_asset.id)
         stored_text = self._text_segments.get_text_representation(authoritative_text.id)
-        if stored_media.sha256 != media_asset.sha256:
+        if stored_media != media_asset:
             raise MfaImportError("The selected media Asset does not match this project.")
         if (
             stored_text != authoritative_text
@@ -55,13 +86,12 @@ class MfaImportService:
             raise MfaImportError(
                 "The authoritative TextRepresentation does not match the selected source."
             )
+        if stored_json.sha256 != json_asset.sha256:
+            raise MfaImportError("The selected MFA JSON Asset does not match this project.")
         word_spans = match_mfa_words(stored_text.content, parsed.words)
         layers = _layer_specs(parsed, word_spans)
         _validate_rounded_durations(layers)
 
-        json_asset = self._corpus.register_local_asset(
-            Path(json_path), asset_kind="document", mime_type="application/json"
-        )
         run = self._corpus.start_processing_run(
             "import", tool_name="LexBundler",
             parameters={
@@ -73,10 +103,8 @@ class MfaImportService:
             },
         )
         try:
-            self._bind(source_id, source_unit_id, json_asset.id,
-                       "forced_alignment_output", run.id)
-            self._bind(source_id, source_unit_id, stored_media.id,
-                       "aligned_media", run.id)
+            for role, asset_id in manual_bindings:
+                self._bind(source_id, source_unit_id, asset_id, role, run.id)
             graph = self._text_segments.create_alignment_graph(
                 AlignmentGraphSpec(
                     source_id=source_id, source_unit_id=source_unit_id,
