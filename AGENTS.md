@@ -71,3 +71,7 @@
 - Waveform visualization is a bounded media projection, not canonical project data.
 - Source hierarchy and user-defined organizational collections are separate concepts.
 - Assets remain independently identified and attach to source hierarchy through roles and bindings.
+- Approved pedagogical boundaries are persisted human-reviewed corpus data distinct from MFA evidence.
+- Rendered study media is replaceable derived output whose source is an approved selection.
+- Re-review is append-only and history-preserving; transient edits persist only after explicit approval.
+- The eventual project landing view is a corpus Explorer; Add Resource workflows remain separate future work.

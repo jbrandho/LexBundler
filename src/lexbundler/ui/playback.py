@@ -2,9 +2,11 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
+from shiboken6 import Shiboken
 from PySide6.QtCore import QObject, QTimer, QUrl, Signal
-from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PySide6.QtMultimedia import QAudioDevice, QAudioOutput, QMediaDevices, QMediaPlayer
 
 from lexbundler.application.alignment_review_service import ReviewUtterance
 
@@ -64,10 +66,28 @@ class PlaybackController(QObject):
         *,
         player: QMediaPlayer | None = None,
         audio_output: QAudioOutput | None = None,
+        media_devices: QMediaDevices | None = None,
+        audio_output_factory: (
+            Callable[[QAudioDevice, QObject], QAudioOutput] | None
+        ) = None,
+        audio_output_deleter: Callable[[QAudioOutput], None] | None = None,
     ) -> None:
         super().__init__(parent)
-        self._audio_output = audio_output or (QAudioOutput(self) if player is None else None)
         self._player = player or QMediaPlayer(self)
+        manage_default_output = (
+            player is None or media_devices is not None
+            or audio_output_factory is not None
+        )
+        self._media_devices = (
+            media_devices or QMediaDevices(self) if manage_default_output else None
+        )
+        self._audio_output_factory = audio_output_factory or QAudioOutput
+        self._audio_output_deleter = audio_output_deleter or Shiboken.delete
+        self._audio_output = audio_output
+        self._retired_audio_outputs: list[QAudioOutput] = []
+        self._shutting_down = False
+        if self._audio_output is None and self._media_devices is not None:
+            self._audio_output = self._new_default_audio_output()
         if self._audio_output is not None:
             self._player.setAudioOutput(self._audio_output)
         self._pending: _PendingPlayback | None = None
@@ -81,6 +101,10 @@ class PlaybackController(QObject):
         self._player.seekableChanged.connect(self._seekable_changed)
         self._player.sourceChanged.connect(self._source_changed)
         self._player.errorOccurred.connect(self._player_error)
+        if self._media_devices is not None:
+            self._media_devices.audioOutputsChanged.connect(
+                self._audio_outputs_changed
+            )
 
     @property
     def duration_ms(self) -> int | None:
@@ -88,6 +112,8 @@ class PlaybackController(QObject):
         return duration if duration > 0 else None
 
     def play(self, path: Path, interval: PlaybackInterval) -> None:
+        if self._shutting_down:
+            return
         self.stop()
         source = QUrl.fromLocalFile(str(Path(path).resolve()))
         self._pending = _PendingPlayback(source, interval)
@@ -101,6 +127,74 @@ class PlaybackController(QObject):
         self._awaiting_seek = False
         self._stop_at_ms = None
         self._player.stop()
+
+    def shutdown(self) -> None:
+        """Deterministically sever native multimedia relationships before teardown."""
+        if self._shutting_down:
+            return
+        self._shutting_down = True
+        if self._media_devices is not None:
+            self._media_devices.audioOutputsChanged.disconnect(
+                self._audio_outputs_changed
+            )
+        self.stop()
+        self._player.setAudioOutput(None)
+
+        outputs = [*self._retired_audio_outputs]
+        if self._audio_output is not None:
+            outputs.append(self._audio_output)
+        self._retired_audio_outputs.clear()
+        self._audio_output = None
+        for output in outputs:
+            if Shiboken.isValid(output):
+                output.setParent(None)
+                self._audio_output_deleter(output)
+
+    def _new_default_audio_output(self) -> QAudioOutput:
+        assert self._media_devices is not None
+        return self._audio_output_factory(
+            self._media_devices.defaultAudioOutput(), self
+        )
+
+    @staticmethod
+    def _same_device(left: QAudioDevice, right: QAudioDevice) -> bool:
+        return left.isNull() == right.isNull() and bytes(left.id()) == bytes(right.id())
+
+    def _audio_outputs_changed(self) -> None:
+        if self._shutting_down or self._media_devices is None:
+            return
+        default = self._media_devices.defaultAudioOutput()
+        available = self._media_devices.audioOutputs()
+        current = (
+            self._audio_output.device() if self._audio_output is not None else None
+        )
+        current_is_default = (
+            current is not None and self._same_device(current, default)
+        )
+        current_is_available = (
+            current is not None
+            and (
+                current.isNull()
+                or any(self._same_device(current, device) for device in available)
+            )
+        )
+        if current_is_default and current_is_available:
+            return
+
+        volume = (
+            self._audio_output.volume() if self._audio_output is not None else 1.0
+        )
+        previous = self._audio_output
+        self.stop()
+        self._player.setAudioOutput(None)
+        if previous is not None:
+            previous.setParent(None)
+            self._retired_audio_outputs.append(previous)
+            previous.deleteLater()
+        replacement = self._new_default_audio_output()
+        replacement.setVolume(volume)
+        self._audio_output = replacement
+        self._player.setAudioOutput(replacement)
 
     def _position_changed(self, position: int) -> None:
         if self._awaiting_seek and self._pending is not None:

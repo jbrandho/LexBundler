@@ -1,4 +1,4 @@
-"""Native Qt read-only alignment review workspace."""
+"""Native Qt alignment and pedagogical review workspace."""
 
 from PySide6.QtCore import QAbstractListModel, QAbstractTableModel, QModelIndex, Qt
 from PySide6.QtGui import QFont, QKeyEvent
@@ -11,6 +11,9 @@ from lexbundler.application.alignment_review_service import (
     AlignmentReviewService, ReviewUtterance, ReviewWord,
 )
 from lexbundler.application.provisional_boundaries import ProvisionalBoundaryModel
+from lexbundler.application.pedagogical_review_service import (
+    PedagogicalReviewRequest, PedagogicalReviewService,
+)
 from lexbundler.application.waveform import WaveformWindow
 from lexbundler.ui.playback import (
     PlaybackController, PlaybackInterval, context_interval, speech_interval,
@@ -82,12 +85,14 @@ class AlignmentReviewWidget(QWidget):
         self, service: AlignmentReviewService,
         playback: PlaybackController | None = None,
         waveform_loader: WaveformLoader | None = None,
+        review_service: PedagogicalReviewService | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
         self._service = service
         self._playback = playback or PlaybackController(self)
         self._waveform_loader = waveform_loader or WaveformLoader(self)
+        self._review_service = review_service
         self._current: ReviewUtterance | None = None
         self._boundaries: ProvisionalBoundaryModel | None = None
 
@@ -110,6 +115,7 @@ class AlignmentReviewWidget(QWidget):
         self.text_label.setFont(text_font)
         self.timing_label = QLabel(objectName="reviewTiming")
         self.proposed_timing_label = QLabel(objectName="proposedTiming")
+        self.approved_timing_label = QLabel(objectName="approvedTiming")
         self.message_label = QLabel(objectName="reviewMessage")
         self.message_label.setWordWrap(True)
         self.waveform = WaveformWidget()
@@ -133,15 +139,18 @@ class AlignmentReviewWidget(QWidget):
         nudge_layout.addRow("Start:", self._start_nudges[0])
         nudge_layout.addRow("End:", self._end_nudges[0])
         self.reset_button = QPushButton("Reset Proposed Bounds", objectName="resetBoundsButton")
+        self.approve_button = QPushButton("Approve Selection", objectName="approveSelectionButton")
 
         detail = QWidget()
         detail_layout = QVBoxLayout(detail)
         detail_layout.addWidget(self.text_label)
         detail_layout.addWidget(self.timing_label)
         detail_layout.addWidget(self.proposed_timing_label)
+        detail_layout.addWidget(self.approved_timing_label)
         detail_layout.addWidget(self.waveform)
         detail_layout.addLayout(nudge_layout)
         detail_layout.addWidget(self.reset_button)
+        detail_layout.addWidget(self.approve_button)
         detail_layout.addLayout(buttons)
         detail_layout.addWidget(self.message_label)
         detail_layout.addWidget(QLabel("MFA acoustic alignment words"))
@@ -169,6 +178,7 @@ class AlignmentReviewWidget(QWidget):
         self._waveform_loader.failed.connect(self._waveform_failed)
         self.waveform.boundaryMoved.connect(self._waveform_boundary_moved)
         self.reset_button.clicked.connect(self._reset_boundaries)
+        self.approve_button.clicked.connect(self._approve_selection)
         self.clear()
 
     def _nudge_row(self, boundary: str) -> tuple[QWidget, tuple[QPushButton, ...]]:
@@ -214,6 +224,11 @@ class AlignmentReviewWidget(QWidget):
             combo.blockSignals(False)
         self.transcript_model.replace(())
         self._show_item(None, "Open a project to review alignment.")
+
+    def shutdown(self) -> None:
+        """Release native playback relationships before widget destruction."""
+        self._waveform_loader.cancel()
+        self._playback.shutdown()
 
     def _source_changed(self) -> None:
         source_id = self.source_combo.currentData()
@@ -277,12 +292,25 @@ class AlignmentReviewWidget(QWidget):
             f"MFA speech: {format_seconds(item.speech_start_ms)} – {format_seconds(item.speech_end_ms)} s"
         )
         self.proposed_timing_label.clear()
+        self.approved_timing_label.setText(
+            "Approved clip: Not approved" if item is not None else ""
+        )
         self.word_model.replace(item.words if item else ())
         reason = item.playback_unavailable_reason if item else None
         self.message_label.setText(reason or "")
         available = bool(item and item.playback_available)
         for button in (self.speech_button, self.study_button, self.context_button):
             button.setEnabled(available)
+        self.approve_button.setEnabled(False)
+        if item is not None and item.approval is not None:
+            approval = item.approval
+            self.approved_timing_label.setText(
+                f"Approved clip: {format_seconds(approval.start_ms)} – "
+                f"{format_seconds(approval.end_ms)} s"
+            )
+            self.approve_button.setText("Re-approve")
+        else:
+            self.approve_button.setText("Approve Selection")
         self._set_editor_enabled(False)
         if (
             item is not None and item.playback_available
@@ -354,9 +382,18 @@ class AlignmentReviewWidget(QWidget):
             self.proposed_timing_label.clear()
             return
         current = self._boundaries.current
+        modified = bool(
+            self._current is not None
+            and self._current.approval is not None
+            and (
+                current.start_ms != self._current.approval.start_ms
+                or current.end_ms != self._current.approval.end_ms
+            )
+        )
         self.proposed_timing_label.setText(
             f"Proposed clip: {format_seconds(current.start_ms)} – "
             f"{format_seconds(current.end_ms)} s"
+            + (" (modified — approval required)" if modified else "")
         )
         self.waveform.set_provisional_bounds(current.start_ms, current.end_ms)
 
@@ -374,6 +411,7 @@ class AlignmentReviewWidget(QWidget):
                 self._update_proposed_display()
             self.waveform.set_waveform(waveform)
             self._set_editor_enabled(True)
+            self.approve_button.setEnabled(self._review_service is not None)
 
     def _waveform_failed(self, message: str) -> None:
         self.waveform.set_unavailable(f"Waveform unavailable: {message}")
@@ -391,11 +429,57 @@ class AlignmentReviewWidget(QWidget):
             visible_end_ms=visible_end,
             preceding_silence_start_ms=item.preceding_silence_start_ms,
             following_silence_end_ms=item.following_silence_end_ms,
+            baseline_start_ms=item.approval.start_ms if item.approval else None,
+            baseline_end_ms=item.approval.end_ms if item.approval else None,
         )
 
     def _set_editor_enabled(self, enabled: bool) -> None:
         for button in (*self._start_nudges[1], *self._end_nudges[1], self.reset_button):
             button.setEnabled(enabled)
+
+    def _approve_selection(self) -> None:
+        if (
+            self._review_service is None or self._current is None
+            or self._boundaries is None or self._current.text_span_id is None
+            or self._current.audio_asset_id is None
+        ):
+            return
+        current = self._boundaries.current
+        request = PedagogicalReviewRequest(
+            transcript_segment_id=self._current.segment_id,
+            transcript_text_span_id=self._current.text_span_id,
+            source_audio_asset_id=self._current.audio_asset_id,
+            approved_start_ms=current.start_ms,
+            approved_end_ms=current.end_ms,
+            alignment_layer_id=self._current.alignment_layer_id,
+            mfa_speech_start_ms=self._current.speech_start_ms,
+            mfa_speech_end_ms=self._current.speech_end_ms,
+            manually_edited=current != self._boundaries.default,
+        )
+        transcript_segment_id = self._current.segment_id
+        try:
+            self._review_service.approve(request)
+        except Exception as error:
+            self.message_label.setText(f"Approval failed: {error}")
+            return
+        self._reload_current(transcript_segment_id)
+        self.message_label.setText("Selection approved.")
+
+    def _reload_current(self, transcript_segment_id: int) -> None:
+        if self._current is None:
+            return
+        result = self._service.load(
+            self._current.source_id, self._current.source_unit_id,
+            alignment_layer_id=self._current.alignment_layer_id,
+        )
+        self.transcript_model.replace(result.utterances)
+        row = next(
+            (index for index, item in enumerate(result.utterances)
+             if item.segment_id == transcript_segment_id),
+            None,
+        )
+        if row is not None:
+            self.transcript_list.setCurrentIndex(self.transcript_model.index(row, 0))
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         if event.key() == Qt.Key.Key_Space and self._current is not None:

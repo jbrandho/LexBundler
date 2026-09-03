@@ -6,6 +6,12 @@ from pathlib import Path
 from lexbundler.application.corpus_service import CorpusService
 from lexbundler.application.text_segment_service import TextSegmentService
 from lexbundler.domain.text_segments import SegmentLayer, TextRepresentation
+from lexbundler.application.pedagogical_review_service import (
+    APPROVED_MEDIA_ROLE,
+    REVIEW_LAYER_KIND,
+    REVIEW_SEGMENT_KIND,
+    REVIEW_TEXT_ROLE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +44,19 @@ class ReviewWord:
 
 
 @dataclass(frozen=True, slots=True)
+class ReviewApproval:
+    layer_id: int
+    segment_id: int
+    text_span_id: int
+    source_span_id: int
+    processing_run_id: int
+    start_ms: int
+    end_ms: int
+    transcript_segment_id: int | None = None
+    authoritative_text_span_id: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ReviewUtterance:
     segment_id: int
     sequence: int
@@ -58,6 +77,9 @@ class ReviewUtterance:
     words: tuple[ReviewWord, ...]
     playback_available: bool
     playback_unavailable_reason: str | None
+    text_representation_id: int | None = None
+    text_span_id: int | None = None
+    approval: ReviewApproval | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +152,7 @@ class AlignmentReviewService:
             (layer for layer in candidates if layer.id == selected_id), None
         )
         alignment_items = self._alignment_items(selected_layer)
+        approvals = self._review_approvals(source_id, source_unit_id)
 
         utterances = tuple(
             self._utterance(
@@ -140,6 +163,7 @@ class AlignmentReviewService:
                 unit.label if unit else None,
                 selected_layer,
                 alignment_items,
+                approvals,
             )
             for segment, span, representation in transcript_rows
         )
@@ -208,7 +232,7 @@ class AlignmentReviewService:
 
     def _utterance(
         self, segment, span, representation, source_label, unit_label,
-        selected_layer, alignment_items,
+        selected_layer, alignment_items, approvals,
     ) -> ReviewUtterance:
         lexical: list[ReviewWord] = []
         matching_items: list[dict[str, object]] = []
@@ -244,6 +268,14 @@ class AlignmentReviewService:
             reason = "The aligned source audio has no usable local file."
         else:
             reason = None
+        matching_approvals = [
+            approval for approval, approval_span in approvals
+            if approval.transcript_segment_id == segment.id
+            and approval_span.text_representation_id == representation.id
+            and approval_span.start_offset == span.start_offset
+            and approval_span.end_offset == span.end_offset
+        ]
+        approval = matching_approvals[0] if matching_approvals else None
         return ReviewUtterance(
             segment.id, segment.sequence or 0,
             representation.content[span.start_offset:span.end_offset],
@@ -251,8 +283,61 @@ class AlignmentReviewService:
             source_label, representation.source_unit_id, unit_label,
             selected_layer.id if selected_layer else None, audio_asset_id, audio_path,
             speech_start, speech_end, preceding, following, tuple(lexical),
-            reason is None, reason,
+            reason is None, reason, representation.id, span.id, approval,
         )
+
+    def list_review_history(
+        self, source_id: int, source_unit_id: int | None,
+        transcript_segment_id: int,
+    ) -> tuple[ReviewApproval, ...]:
+        return tuple(
+            approval for approval, _span in self._review_approvals(
+                source_id, source_unit_id
+            )
+            if approval.transcript_segment_id == transcript_segment_id
+        )
+
+    def _review_approvals(self, source_id: int, source_unit_id: int | None):
+        runs = {run.id: run for run in self._corpus.list_processing_runs()}
+        results = []
+        for layer in self._text_segments.list_segment_layers(source_id):
+            run = runs.get(layer.created_by_run_id)
+            if (
+                layer.source_unit_id != source_unit_id
+                or layer.layer_kind != REVIEW_LAYER_KIND
+                or run is None
+                or run.status != "succeeded"
+            ):
+                continue
+            segments = self._text_segments.list_segments(layer.id)
+            if len(segments) != 1 or segments[0].kind != REVIEW_SEGMENT_KIND:
+                continue
+            segment = segments[0]
+            text_spans = [
+                span for span in self._text_segments.list_segment_text_spans(segment.id)
+                if span.role == REVIEW_TEXT_ROLE
+            ]
+            source_spans = [
+                span for span in self._text_segments.list_segment_media_spans(segment.id)
+                if span.role == APPROVED_MEDIA_ROLE
+            ]
+            if len(text_spans) != 1 or len(source_spans) != 1:
+                continue
+            results.append((ReviewApproval(
+                layer.id, segment.id, text_spans[0].id, source_spans[0].id,
+                run.id, source_spans[0].start_ms, source_spans[0].end_ms,
+                layer.metadata.get("authoritative_transcript_segment_id"),
+                layer.metadata.get("authoritative_text_span_id"),
+            ), text_spans[0], run))
+        results.sort(
+            key=lambda item: (
+                item[2].completed_at or item[2].started_at,
+                item[2].id,
+                item[0].layer_id,
+            ),
+            reverse=True,
+        )
+        return tuple((approval, span) for approval, span, _run in results)
 
     def _neighboring_silence(self, items, words, asset_id):
         if not words or asset_id is None:

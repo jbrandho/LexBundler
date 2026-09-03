@@ -10,6 +10,7 @@ from lexbundler.application.audio_clip_service import AudioClipService
 from lexbundler.application.corpus_service import CorpusService
 from lexbundler.application.forced_alignment_service import ForcedAlignmentService
 from lexbundler.application.mfa_import_service import MfaImportService
+from lexbundler.application.pedagogical_review_service import PedagogicalReviewService
 from lexbundler.application.text_segment_service import TextSegmentService
 from lexbundler.application.transcript_import_service import TranscriptImportService
 from lexbundler.application.whisper_import_service import WhisperImportService
@@ -51,6 +52,9 @@ class ProjectService:
         )
         self._audio_clip_service = AudioClipService(
             self._corpus_service, self._text_segment_service
+        )
+        self._pedagogical_review_service = PedagogicalReviewService(
+            self._corpus_service, self._text_segment_service,
         )
         self._anki_export_service = AnkiExportService(
             self._corpus_service,
@@ -110,6 +114,11 @@ class ProjectService:
     def alignment_review(self) -> AlignmentReviewService:
         """Return the read-only alignment-review projection service."""
         return self._alignment_review_service
+
+    @property
+    def pedagogical_reviews(self) -> PedagogicalReviewService:
+        """Return explicit pedagogical approval operations."""
+        return self._pedagogical_review_service
 
     @property
     def current_project(self) -> ProjectMetadata | None:

@@ -17,6 +17,25 @@ def test_main_window_can_be_constructed(qapplication: QApplication) -> None:
     window.close()
 
 
+def test_window_close_explicitly_shuts_down_playback(
+    qapplication: QApplication,
+) -> None:
+    window = MainWindow(ProjectService(SQLiteProjectStoreFactory()))
+    playback = window.review_widget._playback
+    original_shutdown = playback.shutdown
+    calls = []
+
+    def recording_shutdown():
+        calls.append("shutdown")
+        original_shutdown()
+
+    playback.shutdown = recording_shutdown
+
+    window.close()
+
+    assert calls == ["shutdown"]
+
+
 def test_file_actions_and_project_state(
     qapplication: QApplication, tmp_path: Path
 ) -> None:
@@ -48,4 +67,3 @@ def test_file_actions_and_project_state(
     assert not close_action.isEnabled()
 
     window.close()
-

@@ -294,6 +294,13 @@ class SQLiteCorpusStore(SQLiteStoreBase):
         with self._connection() as connection:
             return _run_from_row(_row_by_id(connection, "processing_run", run_id))
 
+    def list_processing_runs(self) -> list[ProcessingRun]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM processing_run ORDER BY id"
+            ).fetchall()
+            return [_run_from_row(row) for row in rows]
+
 def _row_by_id(
     connection: sqlite3.Connection, table: str, entity_id: object
 ) -> sqlite3.Row:

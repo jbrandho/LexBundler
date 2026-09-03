@@ -1,7 +1,7 @@
 from dataclasses import replace
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QUrl, Signal
+from PySide6.QtCore import QByteArray, QObject, QUrl, Signal
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtWidgets import QApplication
 
@@ -37,6 +37,8 @@ class FakePlayer(QObject):
         self.set_position_calls = []
         self.play_calls = 0
         self.stop_calls = 0
+        self.audio_outputs = []
+        self.events = []
         self.accept_seek = True
 
     def source(self):
@@ -74,6 +76,11 @@ class FakePlayer(QObject):
 
     def stop(self):
         self.stop_calls += 1
+        self.events.append("stop")
+
+    def setAudioOutput(self, output):
+        self.audio_outputs.append(output)
+        self.events.append("detach" if output is None else "attach")
 
     def finish_loading(self):
         self._status = QMediaPlayer.MediaStatus.LoadedMedia
@@ -84,6 +91,74 @@ class FakePlayer(QObject):
 
 def _controller(player: FakePlayer) -> PlaybackController:
     return PlaybackController(player=player)
+
+
+class FakeDevice:
+    def __init__(self, identifier: str, description: str = "") -> None:
+        self._identifier = identifier
+        self._description = description or identifier
+
+    def id(self):
+        return QByteArray(self._identifier.encode())
+
+    def isNull(self):
+        return not self._identifier
+
+    def description(self):
+        return self._description
+
+
+class FakeMediaDevices(QObject):
+    audioOutputsChanged = Signal()
+
+    def __init__(self, default: FakeDevice, outputs: list[FakeDevice]) -> None:
+        super().__init__()
+        self.default = default
+        self.outputs = outputs
+
+    def defaultAudioOutput(self):
+        return self.default
+
+    def audioOutputs(self):
+        return self.outputs
+
+    def change(self, default: FakeDevice, outputs: list[FakeDevice]) -> None:
+        self.default = default
+        self.outputs = outputs
+        self.audioOutputsChanged.emit()
+
+
+class FakeAudioOutput(QObject):
+    def __init__(self, device: FakeDevice, _parent: QObject) -> None:
+        super().__init__()
+        self._device = device
+        self._volume = 1.0
+
+    def device(self):
+        return self._device
+
+    def volume(self):
+        return self._volume
+
+    def setVolume(self, volume):
+        self._volume = volume
+
+
+def _managed_controller(player, devices, *, deleter=None):
+    created = []
+
+    def create_output(device, parent):
+        output = FakeAudioOutput(device, parent)
+        created.append(output)
+        return output
+
+    controller = PlaybackController(
+        player=player,
+        media_devices=devices,
+        audio_output_factory=create_output,
+        audio_output_deleter=deleter,
+    )
+    return controller, created
 
 
 def test_playback_interval_calculations() -> None:
@@ -113,6 +188,172 @@ def test_controller_stops_when_position_reaches_target(
     assert controller._stop_at_ms == 500
     controller._position_changed(500)
     assert controller._stop_at_ms is None
+
+
+def test_initial_construction_uses_current_default_output() -> None:
+    speakers = FakeDevice("speakers", "Mac Speakers")
+    devices = FakeMediaDevices(speakers, [speakers])
+    player = FakePlayer()
+
+    controller, created = _managed_controller(player, devices)
+
+    assert controller._audio_output is created[0]
+    assert created[0].device() is speakers
+    assert player.audio_outputs == [created[0]]
+    assert player.play_calls == 0
+
+
+def test_default_output_change_recreates_and_attaches_without_playback() -> None:
+    speakers = FakeDevice("speakers")
+    airpods = FakeDevice("airpods")
+    devices = FakeMediaDevices(speakers, [speakers])
+    player = FakePlayer()
+    controller, created = _managed_controller(player, devices)
+    created[0].setVolume(0.37)
+
+    devices.change(airpods, [speakers, airpods])
+
+    assert len(created) == 2
+    assert controller._audio_output is created[1]
+    assert created[1].device() is airpods
+    assert created[1].volume() == 0.37
+    assert player.audio_outputs == [created[0], None, created[1]]
+    assert player.stop_calls == 1
+    assert player.play_calls == 0
+
+
+def test_disappearing_output_cannot_remain_selected() -> None:
+    airpods = FakeDevice("airpods")
+    speakers = FakeDevice("speakers")
+    devices = FakeMediaDevices(airpods, [airpods, speakers])
+    player = FakePlayer()
+    controller, created = _managed_controller(player, devices)
+
+    devices.change(speakers, [speakers])
+
+    assert controller._audio_output.device() is speakers
+    assert created[0].device() is airpods
+    assert created[0] is not controller._audio_output
+
+
+def test_unchanged_available_default_does_not_interrupt_playback() -> None:
+    speakers = FakeDevice("speakers")
+    devices = FakeMediaDevices(speakers, [speakers])
+    player = FakePlayer()
+    controller, created = _managed_controller(player, devices)
+
+    devices.change(FakeDevice("speakers"), [FakeDevice("speakers")])
+
+    assert len(created) == 1
+    assert controller._audio_output is created[0]
+    assert player.stop_calls == 0
+
+
+def test_pending_playback_is_cancelled_safely_across_device_change(
+    tmp_path: Path,
+) -> None:
+    speakers = FakeDevice("speakers")
+    airpods = FakeDevice("airpods")
+    devices = FakeMediaDevices(speakers, [speakers])
+    player = FakePlayer()
+    controller, _created = _managed_controller(player, devices)
+    controller.play(tmp_path / "audio.wav", PlaybackInterval(1000, 2000))
+
+    devices.change(airpods, [airpods])
+    player.finish_loading()
+
+    assert controller._pending is None
+    assert controller._stop_at_ms is None
+    assert player.set_position_calls == []
+    assert player.play_calls == 0
+
+
+def test_device_change_stops_active_interval_without_resuming(tmp_path: Path) -> None:
+    speakers = FakeDevice("speakers")
+    airpods = FakeDevice("airpods")
+    devices = FakeMediaDevices(speakers, [speakers])
+    player = FakePlayer()
+    player._status = QMediaPlayer.MediaStatus.LoadedMedia
+    player._seekable = True
+    controller, _created = _managed_controller(player, devices)
+    controller.play(tmp_path / "audio.wav", PlaybackInterval(1200, 1900))
+    player.finish_loading()
+    assert player.play_calls == 1
+
+    devices.change(airpods, [airpods])
+
+    assert controller._pending is None
+    assert controller._stop_at_ms is None
+    assert player.play_calls == 1
+    assert player.stop_calls >= 2
+
+
+def test_shutdown_detaches_before_disposing_current_and_retired_outputs() -> None:
+    speakers = FakeDevice("speakers")
+    airpods = FakeDevice("airpods")
+    display = FakeDevice("display")
+    devices = FakeMediaDevices(speakers, [speakers])
+    player = FakePlayer()
+    disposed = []
+
+    def dispose(output):
+        player.events.append("dispose")
+        disposed.append(output)
+
+    controller, created = _managed_controller(
+        player, devices, deleter=dispose
+    )
+    devices.change(airpods, [airpods])
+    devices.change(display, [display])
+    player.events.clear()
+
+    controller.shutdown()
+
+    assert player.events == ["stop", "detach", "dispose", "dispose", "dispose"]
+    assert disposed == created
+    assert controller._audio_output is None
+    assert controller._retired_audio_outputs == []
+
+
+def test_shutdown_is_idempotent_and_device_notifications_become_inert() -> None:
+    speakers = FakeDevice("speakers")
+    airpods = FakeDevice("airpods")
+    devices = FakeMediaDevices(speakers, [speakers])
+    player = FakePlayer()
+    disposed = []
+    controller, created = _managed_controller(
+        player, devices, deleter=disposed.append
+    )
+
+    controller.shutdown()
+    calls_after_shutdown = (
+        player.stop_calls, tuple(player.audio_outputs), tuple(disposed)
+    )
+    controller.shutdown()
+    devices.change(airpods, [airpods])
+
+    assert (player.stop_calls, tuple(player.audio_outputs), tuple(disposed)) == (
+        calls_after_shutdown
+    )
+    assert disposed == created
+
+
+def test_playback_state_machine_works_after_output_replacement(
+    tmp_path: Path,
+) -> None:
+    speakers = FakeDevice("speakers")
+    airpods = FakeDevice("airpods")
+    devices = FakeMediaDevices(speakers, [speakers])
+    player = FakePlayer()
+    controller, _created = _managed_controller(player, devices)
+    devices.change(airpods, [airpods])
+
+    controller.play(tmp_path / "audio.wav", PlaybackInterval(1200, 1900))
+    player.finish_loading()
+
+    assert player.set_position_calls == [1200]
+    assert player.play_calls == 1
+    assert controller._stop_at_ms == 1900
 
 
 def test_first_request_waits_for_loaded_seekable_media(tmp_path: Path) -> None:

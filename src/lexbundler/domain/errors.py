@@ -113,5 +113,9 @@ class MediaRenderError(CorpusError):
     """Raised when a durable derived-media rendering operation fails."""
 
 
+class PedagogicalReviewError(CorpusError):
+    """Raised when a reviewed pedagogical selection cannot be approved."""
+
+
 class AnkiExportError(CorpusError):
     """Raised when a listening-deck export cannot be completed safely."""

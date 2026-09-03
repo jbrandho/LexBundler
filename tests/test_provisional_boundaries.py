@@ -68,3 +68,12 @@ def test_new_utterance_has_independent_default_state() -> None:
     assert second.current.start_ms == 3950
     assert first.current != first.default
 
+
+def test_approved_baseline_replaces_derived_default_and_reset_returns_to_it() -> None:
+    model = _model(baseline_start_ms=925, baseline_end_ms=2175)
+    assert model.current.start_ms == 925
+    assert model.current.end_ms == 2175
+    model.nudge_start(50)
+    model.nudge_end(-50)
+    assert model.current != model.default
+    assert model.reset() == model.default

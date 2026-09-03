@@ -21,17 +21,26 @@ class ProvisionalBoundaryModel:
         visible_end_ms: int,
         preceding_silence_start_ms: int | None = None,
         following_silence_end_ms: int | None = None,
+        baseline_start_ms: int | None = None,
+        baseline_end_ms: int | None = None,
     ) -> None:
         if not 0 <= visible_start_ms <= speech_start_ms < speech_end_ms <= visible_end_ms:
             raise ValueError("Speech must be a non-empty interval inside the visible window.")
         self.speech = BoundaryInterval(speech_start_ms, speech_end_ms)
         self.visible = BoundaryInterval(visible_start_ms, visible_end_ms)
-        default_start = max(visible_start_ms, 0, speech_start_ms - 50)
-        default_end = min(visible_end_ms, speech_end_ms + 150)
-        if preceding_silence_start_ms is not None:
-            default_start = max(default_start, preceding_silence_start_ms)
-        if following_silence_end_ms is not None:
-            default_end = min(default_end, following_silence_end_ms)
+        if (baseline_start_ms is None) != (baseline_end_ms is None):
+            raise ValueError("Approved baseline bounds must both be present.")
+        if baseline_start_ms is not None and baseline_end_ms is not None:
+            if not visible_start_ms <= baseline_start_ms < baseline_end_ms <= visible_end_ms:
+                raise ValueError("Approved baseline must be inside the visible window.")
+            default_start, default_end = baseline_start_ms, baseline_end_ms
+        else:
+            default_start = max(visible_start_ms, 0, speech_start_ms - 50)
+            default_end = min(visible_end_ms, speech_end_ms + 150)
+            if preceding_silence_start_ms is not None:
+                default_start = max(default_start, preceding_silence_start_ms)
+            if following_silence_end_ms is not None:
+                default_end = min(default_end, following_silence_end_ms)
         self.default = BoundaryInterval(default_start, default_end)
         self._start_ms = default_start
         self._end_ms = default_end
@@ -62,4 +71,3 @@ class ProvisionalBoundaryModel:
         self._start_ms = self.default.start_ms
         self._end_ms = self.default.end_ms
         return self.current
-

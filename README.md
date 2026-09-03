@@ -79,7 +79,7 @@ The backend can pair caller-selected SegmentTextSpans with caller-selected `rend
 
 Selection is entirely caller-supplied. LexBundler does not yet automatically select pedagogical material, generate Pinyin, translate text, or provide an Anki export UI; this is a narrow backend listening-comprehension path, not a curriculum generator.
 
-## Read-only alignment review
+## Alignment and pedagogical review
 
 The desktop review workspace consumes immutable application-level projections; Qt
 widgets do not reconstruct joins or access SQLite. It browses sources and source
@@ -89,13 +89,13 @@ acoustic word segmentation remain distinct layers.
 
 Speech and preview playback ranges are calculated at read time from lexical MFA
 media spans. Silence-aware study padding and wider context bounds are provisional
-playback values only: they are not persisted as reviewed or pedagogical boundaries.
-Boundary editing, review, and approval remain separate future workflows.
+playback values only until the user explicitly approves a selection.
 
 The waveform is a bounded, transient projection decoded from immutable source media;
 it is not canonical project data. Editable proposed clip boundaries are likewise
-in-memory review state. They remain distinct from immutable MFA evidence, and only
-an explicit future approval workflow may persist reviewed pedagogical boundaries.
+in-memory review state. They remain distinct from immutable MFA evidence. Explicit
+approval persists the reviewed layer, reviewed segment, exact authoritative text
+span, approved source-audio span, and review provenance without rendering media.
 Waveform extraction invokes `ffmpeg` from `PATH` asynchronously and decodes only the
 visible window to reduced-rate mono analysis PCM; source-audio playback remains Qt.
 
@@ -103,6 +103,14 @@ Source hierarchy is also distinct from future user-defined organizational
 collections. Assets retain their independent content identity and attach to the
 source hierarchy through roles and bindings; navigation alone does not justify a
 collection model.
+
+Explicitly approved pedagogical boundaries are persisted human-reviewed corpus data
+and remain separate from immutable MFA evidence. A reviewed pedagogical clip is
+canonically a logical span over immutable source media. Physical media files are
+optional derived materializations created only when a downstream workflow requires
+them. Re-review appends history rather than overwriting it, and transient edits never
+persist without explicit approval. A future corpus Explorer and Add Resource workflow
+remain separate from this review path.
 
 ## Development setup
 

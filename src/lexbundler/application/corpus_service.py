@@ -219,6 +219,9 @@ class CorpusService:
     def get_processing_run(self, run_id: int) -> ProcessingRun:
         return self._require_store().get_processing_run(run_id)
 
+    def list_processing_runs(self) -> list[ProcessingRun]:
+        return self._require_store().list_processing_runs()
+
     def _bind_asset(
         self,
         source_id: int,

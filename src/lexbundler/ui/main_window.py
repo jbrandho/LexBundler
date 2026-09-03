@@ -43,7 +43,10 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(quit_action)
 
-        self.review_widget = AlignmentReviewWidget(project_service.alignment_review)
+        self.review_widget = AlignmentReviewWidget(
+            project_service.alignment_review,
+            review_service=project_service.pedagogical_reviews,
+        )
         self.setCentralWidget(self.review_widget)
         self._refresh_project_state()
 
@@ -99,6 +102,6 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, title, str(error))
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 (Qt API)
-        self.review_widget.clear()
+        self.review_widget.shutdown()
         self._project_service.close_project()
         event.accept()

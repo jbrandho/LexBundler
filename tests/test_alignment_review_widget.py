@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
@@ -5,7 +6,8 @@ from PySide6.QtWidgets import QApplication
 
 from lexbundler.application.project_service import ProjectService
 from lexbundler.application.alignment_review_service import (
-    ReviewAlignment, ReviewSelection, ReviewSource, ReviewUtterance, ReviewWord,
+    ReviewAlignment, ReviewApproval, ReviewSelection, ReviewSource,
+    ReviewUtterance, ReviewWord,
 )
 from lexbundler.application.waveform import WaveformBucket, WaveformWindow
 from lexbundler.persistence.sqlite import SQLiteProjectStoreFactory
@@ -135,4 +137,71 @@ def test_widget_shows_words_enables_playback_and_requests_stop_on_selection(
     assert playback.stop_calls > stopped
     assert widget.text_label.text() == "再见"
     assert widget.proposed_timing_label.text() == "Proposed clip: 0.550 – 1.000 s"
+    widget.close()
+
+
+def test_approved_baseline_dirty_reset_and_explicit_approval(
+    qapplication: QApplication, tmp_path: Path,
+) -> None:
+    audio = tmp_path / "audio.wav"
+    audio.write_bytes(b"audio")
+    approval = ReviewApproval(
+        20, 21, 22, 23, 24, 80, 480
+    )
+    item = ReviewUtterance(
+        1, 0, "你好", 0, 2, 1, "Source", None, None, 8, 3, audio,
+        100, 400, 0, 500, (), True, None, 9, 10, approval,
+    )
+
+    class Projection:
+        current = item
+
+        def list_sources(self):
+            return (ReviewSource(1, "Source"),)
+
+        def list_units(self, _source_id):
+            return ()
+
+        def load(self, _source_id, _unit_id, *, alignment_layer_id=None):
+            return ReviewSelection((ReviewAlignment(8, "MFA"),), 8, (self.current,))
+
+    class ReviewService:
+        requests = []
+
+        def approve(self, request):
+            self.requests.append(request)
+            updated = ReviewApproval(
+                30, 31, 32, 33, 34, request.approved_start_ms,
+                request.approved_end_ms,
+            )
+            projection.current = replace(projection.current, approval=updated)
+            return object()
+
+    projection = Projection()
+    reviews = ReviewService()
+    playback = FakePlayback()
+    loader = FakeWaveformLoader()
+    widget = AlignmentReviewWidget(
+        projection, playback, loader, reviews
+    )
+    widget.refresh()
+    loader.loaded.emit(WaveformWindow(
+        3, audio, 0, 1400, (WaveformBucket(-0.5, 0.5),)
+    ))
+
+    assert widget.proposed_timing_label.text() == "Proposed clip: 0.080 – 0.480 s"
+    assert widget.approved_timing_label.text() == "Approved clip: 0.080 – 0.480 s"
+    assert widget.approve_button.text() == "Re-approve"
+    widget._start_nudges[1][-1].click()
+    assert "modified — approval required" in widget.proposed_timing_label.text()
+    widget.reset_button.click()
+    assert "modified" not in widget.proposed_timing_label.text()
+    widget._end_nudges[1][0].click()
+    widget.approve_button.click()
+
+    assert len(reviews.requests) == 1
+    assert reviews.requests[0].approved_end_ms == 430
+    assert reviews.requests[0].manually_edited is True
+    assert projection.current.approval.processing_run_id == 34
+    assert widget.message_label.text() == "Selection approved."
     widget.close()
