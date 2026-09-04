@@ -11,6 +11,7 @@ from lexbundler.application.corpus_service import CorpusService
 from lexbundler.application.forced_alignment_service import ForcedAlignmentService
 from lexbundler.application.mfa_import_service import MfaImportService
 from lexbundler.application.pedagogical_review_service import PedagogicalReviewService
+from lexbundler.application.project_explorer_service import ProjectExplorerService
 from lexbundler.application.text_segment_service import TextSegmentService
 from lexbundler.application.transcript_import_service import TranscriptImportService
 from lexbundler.application.whisper_import_service import WhisperImportService
@@ -63,6 +64,11 @@ class ProjectService:
         )
         self._alignment_review_service = AlignmentReviewService(
             self._corpus_service, self._text_segment_service
+        )
+        self._project_explorer_service = ProjectExplorerService(
+            self._corpus_service,
+            self._text_segment_service,
+            self._alignment_review_service,
         )
 
     @property
@@ -119,6 +125,11 @@ class ProjectService:
     def pedagogical_reviews(self) -> PedagogicalReviewService:
         """Return explicit pedagogical approval operations."""
         return self._pedagogical_review_service
+
+    @property
+    def project_explorer(self) -> ProjectExplorerService:
+        """Return read projections for the Explorer workspace."""
+        return self._project_explorer_service
 
     @property
     def current_project(self) -> ProjectMetadata | None:

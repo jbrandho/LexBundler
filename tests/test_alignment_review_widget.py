@@ -2,7 +2,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QSplitter
 
 from lexbundler.application.project_service import ProjectService
 from lexbundler.application.alignment_review_service import (
@@ -28,6 +28,9 @@ class FakePlayback(QObject):
 
     def play(self, path, interval):
         self.play_calls.append((path, interval))
+
+    def shutdown(self):
+        self.stop()
 
 
 class FakeWaveformLoader(QObject):
@@ -67,6 +70,13 @@ def test_widget_populates_and_clears_without_alignment(
     widget = AlignmentReviewWidget(service.alignment_review, playback)
 
     widget.refresh()
+    assert isinstance(widget.review_splitter, QSplitter)
+    assert widget.review_splitter.count() == 2
+    assert [button.text() for button in widget._start_nudges[1]] == [
+        "-50", "-10", "+10", "+50"
+    ]
+    assert all(button.maximumWidth() == 52 for button in widget._start_nudges[1])
+    assert widget.reset_button.text() == "Reset Proposed"
     assert widget.source_combo.currentText() == "Source"
     assert widget.unit_combo.count() == 2
     widget.unit_combo.setCurrentIndex(1)
@@ -204,4 +214,34 @@ def test_approved_baseline_dirty_reset_and_explicit_approval(
     assert reviews.requests[0].manually_edited is True
     assert projection.current.approval.processing_run_id == 34
     assert widget.message_label.text() == "Selection approved."
+    widget.close()
+
+
+def test_explorer_context_hides_old_selectors_and_cancels_stale_activity(
+    qapplication: QApplication,
+) -> None:
+    class Projection:
+        calls = []
+
+        def load(self, source_id, unit_id, *, alignment_layer_id=None):
+            self.calls.append((source_id, unit_id, alignment_layer_id))
+            return ReviewSelection((), None, ())
+
+    projection = Projection()
+    playback = FakePlayback()
+    loader = FakeWaveformLoader()
+    widget = AlignmentReviewWidget(
+        projection, playback, loader, external_context=True
+    )
+
+    widget.set_context(1, 10)
+    stops = playback.stop_calls
+    cancels = loader.cancel_calls
+    widget.set_context(2, 20)
+
+    assert not widget.context_controls.isVisible()
+    assert projection.calls == [(1, 10, None), (2, 20, None)]
+    assert playback.stop_calls > stops
+    assert loader.cancel_calls > cancels
+    assert widget.transcript_model.rowCount() == 0
     widget.close()

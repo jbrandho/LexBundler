@@ -5,6 +5,7 @@ from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QWidget
 
 from lexbundler.application.waveform import WaveformWindow
+from lexbundler.ui.style import DARK_COLORS
 
 
 class WaveformWidget(QWidget):
@@ -115,7 +116,9 @@ class WaveformWidget(QWidget):
                     self.time_to_x(self._proposed_end_ms) - self.time_to_x(self._proposed_start_ms),
                     graph.height(),
                 )
-                painter.fillRect(selected, QColor(70, 130, 180, 45))
+                selection_color = QColor(DARK_COLORS.accent)
+                selection_color.setAlpha(45)
+                painter.fillRect(selected, selection_color)
             painter.setPen(QPen(self.palette().text().color(), 1))
             count = len(self._waveform.buckets)
             for index, bucket in enumerate(self._waveform.buckets):
@@ -131,7 +134,7 @@ class WaveformWidget(QWidget):
         painter.drawText(self.width() - 70, self.height() - 5, end_text)
 
     def _paint_markers(self, painter: QPainter, graph: QRectF) -> None:
-        painter.setPen(QPen(QColor("#7755aa"), 2, Qt.PenStyle.DashLine))
+        painter.setPen(QPen(QColor(DARK_COLORS.accent), 2, Qt.PenStyle.DashLine))
         for value, label in (
             (self._speech_start_ms, "MFA start"),
             (self._speech_end_ms, "MFA end"),
@@ -140,7 +143,7 @@ class WaveformWidget(QWidget):
                 x = self.time_to_x(value)
                 painter.drawLine(QPointF(x, graph.top()), QPointF(x, graph.bottom()))
                 painter.drawText(QPointF(x + 3, 14), label)
-        painter.setPen(QPen(QColor("#176b45"), 3, Qt.PenStyle.SolidLine))
+        painter.setPen(QPen(QColor(DARK_COLORS.success), 3, Qt.PenStyle.SolidLine))
         for value, label in (
             (self._proposed_start_ms, "Proposed start"),
             (self._proposed_end_ms, "Proposed end"),
@@ -152,7 +155,7 @@ class WaveformWidget(QWidget):
                     QPointF(x - 6, graph.top()), QPointF(x + 6, graph.top()),
                     QPointF(x, graph.top() + 9),
                 ])
-                painter.setBrush(QColor("#176b45"))
+                painter.setBrush(QColor(DARK_COLORS.success))
                 painter.drawPolygon(triangle)
                 painter.drawText(QPointF(x + 3, graph.bottom() - 4), label)
 

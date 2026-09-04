@@ -6,12 +6,16 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QMainWindow,
     QMessageBox,
+    QSplitter,
 )
+from PySide6.QtCore import Qt
 
 from lexbundler.application.project_service import ProjectService
 from lexbundler.domain.errors import ProjectError
 from lexbundler.ui.project_dialog import NewProjectDialog, PROJECT_FILTER
-from lexbundler.ui.alignment_review_widget import AlignmentReviewWidget
+from lexbundler.ui.project_explorer import CorpusExplorerPane
+from lexbundler.ui.resource_workspace import ResourceWorkspace
+from lexbundler.ui.style import apply_workbench_style
 
 
 class MainWindow(QMainWindow):
@@ -21,7 +25,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._project_service = project_service
         self.setWindowTitle("LexBundler")
-        self.resize(900, 600)
+        self.resize(1200, 750)
 
         self._new_project_action = QAction("New Project...", self)
         self._new_project_action.setObjectName("newProjectAction")
@@ -43,11 +47,25 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(quit_action)
 
-        self.review_widget = AlignmentReviewWidget(
+        self.explorer = CorpusExplorerPane()
+        self.workspace = ResourceWorkspace(
+            project_service.project_explorer,
             project_service.alignment_review,
-            review_service=project_service.pedagogical_reviews,
+            project_service.pedagogical_reviews,
         )
-        self.setCentralWidget(self.review_widget)
+        self.review_widget = self.workspace.review_tab
+        self.explorer.resourceSelected.connect(self.workspace.set_resource)
+        self.workbench = QSplitter(Qt.Orientation.Horizontal)
+        self.workbench.setObjectName("corpusWorkbench")
+        self.workbench.addWidget(self.explorer)
+        self.workbench.addWidget(self.workspace)
+        self.workbench.setStretchFactor(0, 0)
+        self.workbench.setStretchFactor(1, 1)
+        self.workbench.setChildrenCollapsible(False)
+        self.workbench.setHandleWidth(1)
+        self.workbench.setSizes([270, 930])
+        self.setCentralWidget(self.workbench)
+        apply_workbench_style(self)
         self._refresh_project_state()
 
     def _new_project(self) -> None:
@@ -92,16 +110,23 @@ class MainWindow(QMainWindow):
         if project is None:
             self.setWindowTitle("LexBundler")
             self.statusBar().clearMessage()
-            self.review_widget.clear()
+            self.explorer.clear()
+            self.workspace.clear()
         else:
             self.setWindowTitle(f"LexBundler — {project.name}")
             self.statusBar().showMessage(project.name)
-            self.review_widget.refresh()
+            tree = self._project_service.project_explorer.load_tree(project.name)
+            self.explorer.populate(tree)
+            if tree.resource_count == 0:
+                self.workspace.show_empty_project()
+            self.statusBar().showMessage(
+                f"{project.name} — {tree.resource_count} resources"
+            )
 
     def _show_project_error(self, title: str, error: ProjectError) -> None:
         QMessageBox.critical(self, title, str(error))
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 (Qt API)
-        self.review_widget.shutdown()
+        self.workspace.shutdown()
         self._project_service.close_project()
         event.accept()

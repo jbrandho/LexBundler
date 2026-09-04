@@ -1,10 +1,10 @@
 """Native Qt alignment and pedagogical review workspace."""
 
-from PySide6.QtCore import QAbstractListModel, QAbstractTableModel, QModelIndex, Qt
+from PySide6.QtCore import QAbstractListModel, QAbstractTableModel, QModelIndex, Qt, Signal
 from PySide6.QtGui import QFont, QKeyEvent
 from PySide6.QtWidgets import (
-    QComboBox, QFormLayout, QHBoxLayout, QHeaderView, QLabel, QListView,
-    QPushButton, QSplitter, QTableView, QVBoxLayout, QWidget,
+    QComboBox, QFormLayout, QFrame, QHBoxLayout, QHeaderView, QLabel, QListView,
+    QPushButton, QSizePolicy, QSplitter, QTableView, QVBoxLayout, QWidget,
 )
 
 from lexbundler.application.alignment_review_service import (
@@ -36,6 +36,8 @@ class TranscriptListModel(QAbstractListModel):
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if index.isValid() and role == Qt.ItemDataRole.DisplayRole:
+            return f"{index.row() + 1}    {self.items[index.row()].text}"
+        if index.isValid() and role == Qt.ItemDataRole.ToolTipRole:
             return self.items[index.row()].text
         return None
 
@@ -81,11 +83,14 @@ class WordAlignmentModel(QAbstractTableModel):
 class AlignmentReviewWidget(QWidget):
     """Browse authoritative turns and inspect selected MFA timing evidence."""
 
+    approvalCompleted = Signal()
+
     def __init__(
         self, service: AlignmentReviewService,
         playback: PlaybackController | None = None,
         waveform_loader: WaveformLoader | None = None,
         review_service: PedagogicalReviewService | None = None,
+        external_context: bool = False,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -93,20 +98,28 @@ class AlignmentReviewWidget(QWidget):
         self._playback = playback or PlaybackController(self)
         self._waveform_loader = waveform_loader or WaveformLoader(self)
         self._review_service = review_service
+        self._external_context = external_context
+        self._selected_source_id: int | None = None
+        self._selected_source_unit_id: int | None = None
         self._current: ReviewUtterance | None = None
         self._boundaries: ProvisionalBoundaryModel | None = None
 
         self.source_combo = QComboBox(objectName="reviewSourceCombo")
         self.unit_combo = QComboBox(objectName="reviewUnitCombo")
         self.alignment_combo = QComboBox(objectName="reviewAlignmentCombo")
-        controls = QFormLayout()
+        self.context_controls = QWidget(objectName="reviewContextControls")
+        controls = QFormLayout(self.context_controls)
         controls.addRow("Source:", self.source_combo)
         controls.addRow("Unit:", self.unit_combo)
-        controls.addRow("Alignment evidence:", self.alignment_combo)
+        self.context_controls.setVisible(not external_context)
+        alignment_row = QFormLayout()
+        alignment_row.addRow("Alignment evidence:", self.alignment_combo)
 
         self.transcript_model = TranscriptListModel(self)
         self.transcript_list = QListView(objectName="transcriptTurnList")
         self.transcript_list.setModel(self.transcript_model)
+        self.transcript_list.setAlternatingRowColors(True)
+        self.transcript_list.setSpacing(2)
 
         self.text_label = QLabel("Open a project to review alignment.", objectName="reviewText")
         self.text_label.setWordWrap(True)
@@ -123,46 +136,87 @@ class AlignmentReviewWidget(QWidget):
         self.word_model = WordAlignmentModel(self)
         self.word_table = QTableView(objectName="alignmentWordTable")
         self.word_table.setModel(self.word_model)
-        self.word_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.word_table.setAlternatingRowColors(True)
+        self.word_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for column in (1, 2, 3):
+            self.word_table.horizontalHeader().setSectionResizeMode(
+                column, QHeaderView.ResizeMode.ResizeToContents
+            )
         self.word_table.verticalHeader().hide()
+        self.word_table.verticalHeader().setDefaultSectionSize(28)
 
         self.speech_button = QPushButton("Play MFA Speech", objectName="playSpeechButton")
         self.study_button = QPushButton("Play Proposed Clip", objectName="playStudyButton")
         self.context_button = QPushButton("Play Context", objectName="playContextButton")
         buttons = QHBoxLayout()
+        buttons.setSpacing(8)
         for button in (self.speech_button, self.study_button, self.context_button):
+            button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             buttons.addWidget(button)
+        buttons.addStretch()
 
-        nudge_layout = QFormLayout()
+        nudge_layout = QVBoxLayout()
         self._start_nudges = self._nudge_row("start")
         self._end_nudges = self._nudge_row("end")
-        nudge_layout.addRow("Start:", self._start_nudges[0])
-        nudge_layout.addRow("End:", self._end_nudges[0])
-        self.reset_button = QPushButton("Reset Proposed Bounds", objectName="resetBoundsButton")
+        start_label = QLabel("Start")
+        start_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        end_label = QLabel("End")
+        end_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        nudge_layout.addWidget(start_label)
+        nudge_layout.addWidget(self._start_nudges[0])
+        nudge_layout.addWidget(end_label)
+        nudge_layout.addWidget(self._end_nudges[0])
+        self.reset_button = QPushButton("Reset Proposed", objectName="resetBoundsButton")
         self.approve_button = QPushButton("Approve Selection", objectName="approveSelectionButton")
+        self.approve_button.setProperty("successAction", True)
+        self.approve_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        action_row = QHBoxLayout()
+        action_row.addLayout(buttons)
+        action_row.addStretch()
+        action_row.addWidget(self.approve_button)
 
-        detail = QWidget()
+        detail = QFrame(objectName="reviewDetailFrame")
         detail_layout = QVBoxLayout(detail)
+        detail_layout.setContentsMargins(16, 14, 16, 14)
+        detail_layout.setSpacing(8)
         detail_layout.addWidget(self.text_label)
         detail_layout.addWidget(self.timing_label)
         detail_layout.addWidget(self.proposed_timing_label)
         detail_layout.addWidget(self.approved_timing_label)
         detail_layout.addWidget(self.waveform)
-        detail_layout.addLayout(nudge_layout)
-        detail_layout.addWidget(self.reset_button)
-        detail_layout.addWidget(self.approve_button)
-        detail_layout.addLayout(buttons)
+        compact_controls = QHBoxLayout()
+        compact_controls.addLayout(nudge_layout)
+        compact_controls.addStretch()
+        detail_layout.addLayout(compact_controls)
+        detail_layout.addWidget(self.reset_button, 0, Qt.AlignmentFlag.AlignLeft)
+        detail_layout.addLayout(action_row)
         detail_layout.addWidget(self.message_label)
-        detail_layout.addWidget(QLabel("MFA acoustic alignment words"))
+        word_heading = QLabel("MFA ACOUSTIC ALIGNMENT WORDS")
+        word_heading.setProperty("sectionHeading", True)
+        detail_layout.addWidget(word_heading)
         detail_layout.addWidget(self.word_table, 1)
-        splitter = QSplitter()
-        splitter.addWidget(self.transcript_list)
-        splitter.addWidget(detail)
-        splitter.setStretchFactor(1, 2)
+        list_frame = QFrame(objectName="reviewListFrame")
+        list_layout = QVBoxLayout(list_frame)
+        list_layout.setContentsMargins(0, 12, 0, 0)
+        list_heading = QLabel("UTTERANCES", objectName="reviewUtterancesHeading")
+        list_heading.setProperty("sectionHeading", True)
+        list_heading.setContentsMargins(12, 0, 12, 4)
+        list_layout.addWidget(list_heading)
+        list_layout.addWidget(self.transcript_list, 1)
+        self.review_splitter = QSplitter(objectName="reviewInnerSplitter")
+        self.review_splitter.addWidget(list_frame)
+        self.review_splitter.addWidget(detail)
+        self.review_splitter.setChildrenCollapsible(False)
+        self.review_splitter.setStretchFactor(0, 0)
+        self.review_splitter.setStretchFactor(1, 1)
+        self.review_splitter.setSizes([280, 760])
 
         layout = QVBoxLayout(self)
-        layout.addLayout(controls)
-        layout.addWidget(splitter, 1)
+        layout.addWidget(self.context_controls)
+        layout.addLayout(alignment_row)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+        layout.addWidget(self.review_splitter, 1)
 
         self.source_combo.currentIndexChanged.connect(self._source_changed)
         self.unit_combo.currentIndexChanged.connect(self._unit_changed)
@@ -188,7 +242,9 @@ class AlignmentReviewWidget(QWidget):
         buttons: list[QPushButton] = []
         for delta in (-50, -10, 10, 50):
             sign = "+" if delta > 0 else ""
-            button = QPushButton(f"{sign}{delta} ms")
+            button = QPushButton(f"{sign}{delta}")
+            button.setProperty("compact", True)
+            button.setFixedWidth(52)
             button.setObjectName(f"nudge{boundary.title()}{sign.replace('+', 'Plus')}{delta if delta > 0 else 'Minus' + str(abs(delta))}")
             button.clicked.connect(
                 lambda _checked=False, name=boundary, amount=delta: self._nudge(name, amount)
@@ -198,6 +254,10 @@ class AlignmentReviewWidget(QWidget):
         return container, tuple(buttons)
 
     def refresh(self) -> None:
+        if self._external_context:
+            if self._selected_source_id is not None:
+                self._load(None)
+            return
         previous_source = self.source_combo.currentData()
         self._playback.stop()
         self.source_combo.blockSignals(True)
@@ -217,6 +277,8 @@ class AlignmentReviewWidget(QWidget):
     def clear(self) -> None:
         self._playback.stop()
         self._waveform_loader.cancel()
+        self._selected_source_id = None
+        self._selected_source_unit_id = None
         for combo in (self.source_combo, self.unit_combo, self.alignment_combo):
             combo.blockSignals(True)
             combo.clear()
@@ -225,6 +287,20 @@ class AlignmentReviewWidget(QWidget):
         self.transcript_model.replace(())
         self._show_item(None, "Open a project to review alignment.")
 
+    def set_context(self, source_id: int | None, source_unit_id: int | None) -> None:
+        """Load one Explorer-selected source scope and discard stale review state."""
+        self._playback.stop()
+        self._waveform_loader.cancel()
+        self._selected_source_id = source_id
+        self._selected_source_unit_id = source_unit_id
+        self.alignment_combo.blockSignals(True)
+        self.alignment_combo.clear()
+        self.alignment_combo.blockSignals(False)
+        if source_id is None:
+            self._set_empty("Select a resource in the Corpus Explorer.")
+        else:
+            self._load(None)
+
     def shutdown(self) -> None:
         """Release native playback relationships before widget destruction."""
         self._waveform_loader.cancel()
@@ -232,6 +308,7 @@ class AlignmentReviewWidget(QWidget):
 
     def _source_changed(self) -> None:
         source_id = self.source_combo.currentData()
+        self._selected_source_id = source_id
         self._playback.stop()
         self.unit_combo.blockSignals(True)
         self.unit_combo.clear()
@@ -244,6 +321,7 @@ class AlignmentReviewWidget(QWidget):
         self._unit_changed()
 
     def _unit_changed(self) -> None:
+        self._selected_source_unit_id = self.unit_combo.currentData()
         self._load(None)
 
     def _alignment_changed(self) -> None:
@@ -252,11 +330,20 @@ class AlignmentReviewWidget(QWidget):
     def _load(self, alignment_id: int | None) -> None:
         self._playback.stop()
         self._waveform_loader.cancel()
-        source_id = self.source_combo.currentData()
+        source_id = (
+            self._selected_source_id if self._external_context
+            else self.source_combo.currentData()
+        )
+        source_unit_id = (
+            self._selected_source_unit_id if self._external_context
+            else self.unit_combo.currentData()
+        )
         if source_id is None:
             self._set_empty("Select a corpus source.")
             return
-        result = self._service.load(source_id, self.unit_combo.currentData(), alignment_layer_id=alignment_id)
+        result = self._service.load(
+            source_id, source_unit_id, alignment_layer_id=alignment_id
+        )
         self.alignment_combo.blockSignals(True)
         self.alignment_combo.clear()
         for alignment in result.alignments:
@@ -464,6 +551,7 @@ class AlignmentReviewWidget(QWidget):
             return
         self._reload_current(transcript_segment_id)
         self.message_label.setText("Selection approved.")
+        self.approvalCompleted.emit()
 
     def _reload_current(self, transcript_segment_id: int) -> None:
         if self._current is None:

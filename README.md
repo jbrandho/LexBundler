@@ -104,6 +104,13 @@ collections. Assets retain their independent content identity and attach to the
 source hierarchy through roles and bindings; navigation alone does not justify a
 collection model.
 
+The main project view is a corpus Explorer and resource workspace. The Explorer
+shows the project's actual `CorpusSource` and hierarchical `SourceUnit` structure;
+stable Overview, Transcript, Alignment, Review, and Assets tabs present the selected
+source scope. Overview status and processing history are read-only application
+projections, and the Review tab reuses the alignment and pedagogical-boundary
+workflow. Source files remain referenced at their original filesystem locations.
+
 Explicitly approved pedagogical boundaries are persisted human-reviewed corpus data
 and remain separate from immutable MFA evidence. A reviewed pedagogical clip is
 canonically a logical span over immutable source media. Physical media files are
