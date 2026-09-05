@@ -6,9 +6,10 @@ from typing import Protocol
 from lexbundler.domain.project import ProjectMetadata
 from lexbundler.persistence.corpus_store import CorpusStore
 from lexbundler.persistence.text_segment_store import TextSegmentStore
+from lexbundler.persistence.resource_ingestion_store import ResourceIngestionStore
 
 
-class ProjectStore(CorpusStore, TextSegmentStore, Protocol):
+class ProjectStore(CorpusStore, TextSegmentStore, ResourceIngestionStore, Protocol):
     """An opened project persistence session."""
 
     @property

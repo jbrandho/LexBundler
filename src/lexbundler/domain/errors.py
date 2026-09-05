@@ -89,6 +89,10 @@ class TranscriptImportError(CorpusError):
     """Raised when an authoritative transcript cannot be imported."""
 
 
+class ResourceIngestionError(CorpusError):
+    """Raised when a logical resource cannot be safely ingested."""
+
+
 class MfaImportError(CorpusError):
     """Base class for manual MFA artifact import failures."""
 

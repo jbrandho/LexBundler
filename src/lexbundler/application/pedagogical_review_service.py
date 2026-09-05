@@ -74,12 +74,20 @@ class PedagogicalReviewService:
             raise PedagogicalReviewError(
                 "The selected authoritative text span does not belong to the transcript line."
             )
+        if representation.representation_kind != "authoritative_source":
+            raise PedagogicalReviewError(
+                "The approval basis must be authoritative source text."
+            )
         if (
             representation.source_id != transcript_layer.source_id
             or representation.source_unit_id != transcript_layer.source_unit_id
         ):
             raise PedagogicalReviewError(
                 "The authoritative text and transcript layer do not share a source."
+            )
+        if audio.asset_kind != "audio":
+            raise PedagogicalReviewError(
+                "The reviewed selection must reference a source audio asset."
             )
         if (
             type(request.approved_start_ms) is not int
@@ -90,43 +98,42 @@ class PedagogicalReviewService:
             raise PedagogicalReviewError(
                 "Approved bounds must be a non-empty nonnegative millisecond interval."
             )
-        if (request.mfa_speech_start_ms is None) != (request.mfa_speech_end_ms is None):
-            raise PedagogicalReviewError("MFA speech bounds must both be present.")
-        if (
-            request.mfa_speech_start_ms is not None
-            and request.mfa_speech_end_ms is not None
-        ):
-            if not 0 <= request.mfa_speech_start_ms < request.mfa_speech_end_ms:
-                raise PedagogicalReviewError("MFA speech bounds are invalid.")
-            if (
-                request.approved_start_ms
-                < max(0, request.mfa_speech_start_ms - 1000)
-                or request.approved_end_ms > request.mfa_speech_end_ms + 1000
-            ):
-                raise PedagogicalReviewError(
-                    "Approved bounds must remain inside the review context window."
-                )
-        if request.alignment_layer_id is not None:
-            alignment = self._text_segments.get_segment_layer(
-                request.alignment_layer_id
+        if request.mfa_speech_start_ms is None or request.mfa_speech_end_ms is None:
+            raise PedagogicalReviewError(
+                "Valid MFA speech bounds are required for approval."
             )
-            if (
-                alignment.layer_kind != "forced_alignment"
-                or alignment.source_id != transcript_layer.source_id
-                or alignment.source_unit_id != transcript_layer.source_unit_id
-            ):
-                raise PedagogicalReviewError(
-                    "The selected alignment evidence does not match the transcript."
-                )
-            aligned_assets = {
-                span.asset_id
-                for segment in self._text_segments.list_segments(alignment.id)
-                for span in self._text_segments.list_segment_media_spans(segment.id)
-            }
-            if audio.id not in aligned_assets:
-                raise PedagogicalReviewError(
-                    "The source audio does not match the selected alignment evidence."
-                )
+        if not 0 <= request.mfa_speech_start_ms < request.mfa_speech_end_ms:
+            raise PedagogicalReviewError("MFA speech bounds are invalid.")
+        if (
+            request.approved_start_ms
+            < max(0, request.mfa_speech_start_ms - 1000)
+            or request.approved_end_ms > request.mfa_speech_end_ms + 1000
+        ):
+            raise PedagogicalReviewError(
+                "Approved bounds must remain inside the review context window."
+            )
+        if request.alignment_layer_id is None:
+            raise PedagogicalReviewError(
+                "A forced-alignment layer is required for approval."
+            )
+        alignment = self._text_segments.get_segment_layer(request.alignment_layer_id)
+        if (
+            alignment.layer_kind != "forced_alignment"
+            or alignment.source_id != transcript_layer.source_id
+            or alignment.source_unit_id != transcript_layer.source_unit_id
+        ):
+            raise PedagogicalReviewError(
+                "The selected alignment evidence does not match the transcript."
+            )
+        aligned_assets = {
+            span.asset_id
+            for segment in self._text_segments.list_segments(alignment.id)
+            for span in self._text_segments.list_segment_media_spans(segment.id)
+        }
+        if audio.id not in aligned_assets:
+            raise PedagogicalReviewError(
+                "The source audio does not match the selected alignment evidence."
+            )
         run = self._corpus.start_processing_run(
             "review",
             tool_name="LexBundler",

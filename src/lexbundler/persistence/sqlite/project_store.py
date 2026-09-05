@@ -31,6 +31,9 @@ from lexbundler.persistence.sqlite.schema import (
     create_text_segment_schema_v3,
 )
 from lexbundler.persistence.sqlite.text_segment_store import SQLiteTextSegmentStore
+from lexbundler.persistence.sqlite.resource_ingestion_store import (
+    SQLiteResourceIngestionStore,
+)
 
 
 def _migrate_to_v2(connection: sqlite3.Connection) -> None:
@@ -47,7 +50,9 @@ MIGRATIONS: tuple[Migration, ...] = (
 )
 
 
-class SQLiteProjectStore(SQLiteCorpusStore, SQLiteTextSegmentStore):
+class SQLiteProjectStore(
+    SQLiteCorpusStore, SQLiteTextSegmentStore, SQLiteResourceIngestionStore
+):
     """An opened SQLite project using short-lived operation connections."""
 
     def __init__(self, path: Path, metadata: ProjectMetadata) -> None:

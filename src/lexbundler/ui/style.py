@@ -140,6 +140,20 @@ QFrame[card="true"], QFrame#reviewDetailFrame {{
     border: 1px solid {c.border}; border-radius: 6px;
     background: {c.panel_background};
 }}
+QFrame[choicePanel="true"] {{
+    border: 1px solid {c.border}; border-radius: 5px;
+    background: {c.panel_background};
+}}
+QDialog, QStackedWidget#addResourcePages {{
+    color: {c.primary_text}; background: {c.workspace_background};
+}}
+QLineEdit {{
+    color: {c.primary_text}; background: {c.content_alternate};
+    border: 1px solid {c.border}; border-radius: 4px; padding: 5px 8px;
+    selection-background-color: {c.accent}; selection-color: {c.accent_text};
+}}
+QRadioButton {{ color: {c.primary_text}; spacing: 7px; }}
+QRadioButton:checked {{ color: {c.primary_text}; font-weight: 600; }}
 QFrame#reviewListFrame {{
     border: 1px solid {c.border}; border-radius: 6px;
     background: {c.content_background};

@@ -12,6 +12,7 @@ from lexbundler.application.forced_alignment_service import ForcedAlignmentServi
 from lexbundler.application.mfa_import_service import MfaImportService
 from lexbundler.application.pedagogical_review_service import PedagogicalReviewService
 from lexbundler.application.project_explorer_service import ProjectExplorerService
+from lexbundler.application.resource_ingestion_service import ResourceIngestionService
 from lexbundler.application.text_segment_service import TextSegmentService
 from lexbundler.application.transcript_import_service import TranscriptImportService
 from lexbundler.application.whisper_import_service import WhisperImportService
@@ -69,6 +70,9 @@ class ProjectService:
             self._corpus_service,
             self._text_segment_service,
             self._alignment_review_service,
+        )
+        self._resource_ingestion_service = ResourceIngestionService(
+            self._corpus_service, self._text_segment_service
         )
 
     @property
@@ -132,6 +136,11 @@ class ProjectService:
         return self._project_explorer_service
 
     @property
+    def resource_ingestion(self) -> ResourceIngestionService:
+        """Return the atomic logical-resource ingestion workflow."""
+        return self._resource_ingestion_service
+
+    @property
     def current_project(self) -> ProjectMetadata | None:
         """Return metadata for the open project, if any."""
         if self._current_store is None:
@@ -168,6 +177,7 @@ class ProjectService:
         self._current_store = self._store_factory.create(path, metadata)
         self._corpus_service._attach(self._current_store)
         self._text_segment_service._attach(self._current_store)
+        self._resource_ingestion_service._attach(self._current_store)
         return metadata
 
     def open_project(self, location: Path) -> ProjectMetadata:
@@ -177,6 +187,7 @@ class ProjectService:
         self._current_store = store
         self._corpus_service._attach(store)
         self._text_segment_service._attach(store)
+        self._resource_ingestion_service._attach(store)
         return store.metadata
 
     def close_project(self) -> None:
@@ -187,6 +198,7 @@ class ProjectService:
         self._current_store = None
         self._corpus_service._detach()
         self._text_segment_service._detach()
+        self._resource_ingestion_service._detach()
         store.close()
 
     def _require_closed(self) -> None:

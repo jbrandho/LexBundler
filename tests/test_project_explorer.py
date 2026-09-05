@@ -1,11 +1,14 @@
 from pathlib import Path
 
+from PySide6.QtWidgets import QApplication
+
 from lexbundler.application.pedagogical_review_service import PedagogicalReviewRequest
 from lexbundler.application.project_service import ProjectService
 from lexbundler.domain.text_segments import (
     AlignmentGraphSpec, AlignmentLayerSpec, AlignmentSegmentSpec,
 )
 from lexbundler.persistence.sqlite import SQLiteProjectStoreFactory
+from lexbundler.ui.main_window import MainWindow
 
 
 def _project(tmp_path: Path):
@@ -59,7 +62,7 @@ def test_empty_project_has_no_resources(tmp_path: Path) -> None:
 
 
 def test_resource_overview_uses_existing_evidence_and_review_state(
-    tmp_path: Path,
+    qapplication: QApplication, tmp_path: Path,
 ) -> None:
     project, source, _lesson, text_one, _text_two = _project(tmp_path)
     transcript_file = tmp_path / "dialogue.txt"
@@ -98,10 +101,16 @@ def test_resource_overview_uses_existing_evidence_and_review_state(
     assert overview.breadcrumb == ("Course", "Lesson 1", "Dialogue")
     assert overview.utterances == ("你好", "再见")
     assert overview.approved_count == 1
+    assert overview.reviewable_count == 1
     assert overview.alignments[0].tier == "words"
     assert overview.alignments[0].item_count == 1
     assert any(asset.label == "dialogue.wav" for asset in overview.assets)
     assert any(item.process_type == "review" for item in overview.processing_history)
+    window = MainWindow(project)
+    assert window.workspace.continue_review_button.isEnabled()
+    window.workspace.continue_review_button.click()
+    assert window.workspace.tabs.currentWidget() is window.review_widget
+    window.close()
 
 
 def tree_resource(project: ProjectService, unit_id: int):

@@ -62,7 +62,7 @@ def _project(tmp_path: Path):
     return service
 
 
-def test_widget_populates_and_clears_without_alignment(
+def test_widget_excludes_unreviewable_text_and_clears_without_alignment(
     qapplication: QApplication, tmp_path: Path
 ) -> None:
     service = _project(tmp_path)
@@ -80,16 +80,11 @@ def test_widget_populates_and_clears_without_alignment(
     assert widget.source_combo.currentText() == "Source"
     assert widget.unit_combo.count() == 2
     widget.unit_combo.setCurrentIndex(1)
-    assert widget.transcript_model.rowCount() == 2
-    assert widget.text_label.text() == "你好"
+    assert widget.transcript_model.rowCount() == 0
+    assert widget.text_label.text() == "No reviewable utterances"
     assert widget.word_model.rowCount() == 0
-    assert "No MFA" in widget.message_label.text()
     assert not widget.speech_button.isEnabled()
-
-    before = playback.stop_calls
-    widget.transcript_list.setCurrentIndex(widget.transcript_model.index(1, 0))
-    assert widget.text_label.text() == "再见"
-    assert playback.stop_calls > before
+    assert not widget.approve_button.isEnabled()
 
     widget.clear()
     assert widget.transcript_model.rowCount() == 0
@@ -147,6 +142,8 @@ def test_widget_shows_words_enables_playback_and_requests_stop_on_selection(
     assert playback.stop_calls > stopped
     assert widget.text_label.text() == "再见"
     assert widget.proposed_timing_label.text() == "Proposed clip: 0.550 – 1.000 s"
+    loader.failed.emit("decode failed")
+    assert not widget.approve_button.isEnabled()
     widget.close()
 
 

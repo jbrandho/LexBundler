@@ -60,24 +60,18 @@ def test_review_maps_exact_transcript_spans_words_bounds_and_silence(tmp_path: P
     assert middle.playback_available
 
 
-def test_review_remains_useful_without_alignment_or_local_audio(tmp_path: Path) -> None:
+def test_review_excludes_items_without_alignment_or_local_audio(tmp_path: Path) -> None:
     project = _project(tmp_path)
     source = project.corpus.create_source("Text only")
     transcript_path = tmp_path / "only.txt"
     transcript_path.write_text("可见", encoding="utf-8")
     project.transcript_imports.import_utf8(transcript_path, source_id=source.id)
 
-    item = project.alignment_review.load(source.id, None).utterances[0]
-    assert item.text == "可见"
-    assert item.words == ()
-    assert not item.playback_available
-    assert "No MFA" in item.playback_unavailable_reason
+    assert project.alignment_review.load(source.id, None).utterances == ()
 
     aligned, _text, audio_path, _result = _aligned_source(project, tmp_path, name="Gone")
     audio_path.unlink()
-    unavailable = project.alignment_review.load(aligned.id, None).utterances[0]
-    assert not unavailable.playback_available
-    assert "no usable local file" in unavailable.playback_unavailable_reason
+    assert project.alignment_review.load(aligned.id, None).utterances == ()
 
 
 def test_sources_units_are_isolated_and_latest_alignment_is_default(tmp_path: Path) -> None:
@@ -99,7 +93,7 @@ def test_sources_units_are_isolated_and_latest_alignment_is_default(tmp_path: Pa
     assert [item.label for item in project.alignment_review.list_sources()] == ["With unit", "Second"]
     assert [item.label for item in project.alignment_review.list_units(first.id)] == ["Lesson 1"]
     assert project.alignment_review.load(first.id, None).utterances == ()
-    assert [item.text for item in project.alignment_review.load(first.id, unit.id).utterances] == ["单元"]
+    assert project.alignment_review.load(first.id, unit.id).utterances == ()
     selection = project.alignment_review.load(second.id, None)
     assert len(selection.alignments) == 2
     assert selection.selected_alignment_layer_id == repeated.graph.layers[0].id
@@ -107,4 +101,3 @@ def test_sources_units_are_isolated_and_latest_alignment_is_default(tmp_path: Pa
         second.id, None, alignment_layer_id=initial.graph.layers[0].id
     )
     assert old.selected_alignment_layer_id == initial.graph.layers[0].id
-

@@ -13,6 +13,9 @@ from PySide6.QtCore import Qt
 from lexbundler.application.project_service import ProjectService
 from lexbundler.domain.errors import ProjectError
 from lexbundler.ui.project_dialog import NewProjectDialog, PROJECT_FILTER
+from lexbundler.ui.add_resource_dialog import AddResourceDialog
+from lexbundler.ui.add_asset_dialog import AddAssetDialog
+from lexbundler.application.project_explorer_service import ResourceIdentity
 from lexbundler.ui.project_explorer import CorpusExplorerPane
 from lexbundler.ui.resource_workspace import ResourceWorkspace
 from lexbundler.ui.style import apply_workbench_style
@@ -55,6 +58,8 @@ class MainWindow(QMainWindow):
         )
         self.review_widget = self.workspace.review_tab
         self.explorer.resourceSelected.connect(self.workspace.set_resource)
+        self.explorer.add_button.clicked.connect(self._add_resource)
+        self.workspace.add_asset_button.clicked.connect(self._add_asset)
         self.workbench = QSplitter(Qt.Orientation.Horizontal)
         self.workbench.setObjectName("corpusWorkbench")
         self.workbench.addWidget(self.explorer)
@@ -101,7 +106,36 @@ class MainWindow(QMainWindow):
         self._project_service.close_project()
         self._refresh_project_state()
 
-    def _refresh_project_state(self) -> None:
+    def _add_resource(self) -> None:
+        if self._project_service.current_project is None:
+            return
+        dialog = AddResourceDialog(
+            self._project_service.corpus,
+            self._project_service.resource_ingestion,
+            self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        result = dialog.result_resource
+        if result is not None:
+            self._refresh_project_state(select_resource=result.resource)
+
+    def _add_asset(self) -> None:
+        resource = self.workspace.current_resource
+        if self._project_service.current_project is None or resource is None:
+            return
+        dialog = AddAssetDialog(
+            resource, self.workspace.title.text(),
+            self._project_service.resource_ingestion, self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        if dialog.result_attachment is not None:
+            self._refresh_project_state(select_resource=resource)
+
+    def _refresh_project_state(
+        self, *, select_resource: ResourceIdentity | None = None
+    ) -> None:
         project = self._project_service.current_project
         is_open = project is not None
         self._new_project_action.setEnabled(not is_open)
@@ -116,7 +150,7 @@ class MainWindow(QMainWindow):
             self.setWindowTitle(f"LexBundler — {project.name}")
             self.statusBar().showMessage(project.name)
             tree = self._project_service.project_explorer.load_tree(project.name)
-            self.explorer.populate(tree)
+            self.explorer.populate(tree, selected_resource=select_resource)
             if tree.resource_count == 0:
                 self.workspace.show_empty_project()
             self.statusBar().showMessage(

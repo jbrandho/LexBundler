@@ -358,7 +358,7 @@ class AlignmentReviewWidget(QWidget):
         if result.utterances:
             self.transcript_list.setCurrentIndex(self.transcript_model.index(0, 0))
         else:
-            self._show_item(None, "No authoritative transcript lines are available here.")
+            self._show_item(None, "No reviewable utterances")
 
     def _set_empty(self, message: str) -> None:
         self.transcript_model.replace(())
@@ -503,6 +503,7 @@ class AlignmentReviewWidget(QWidget):
     def _waveform_failed(self, message: str) -> None:
         self.waveform.set_unavailable(f"Waveform unavailable: {message}")
         self._set_editor_enabled(False)
+        self.approve_button.setEnabled(False)
 
     @staticmethod
     def _new_boundary_model(

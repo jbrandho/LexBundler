@@ -90,6 +90,19 @@ class CorpusExplorerModel(QAbstractItemModel):
 
         return visit()
 
+    def resource_index(self, resource: ResourceIdentity) -> QModelIndex:
+        def visit(parent=QModelIndex()):
+            for row in range(self.rowCount(parent)):
+                index = self.index(row, 0, parent)
+                if index.data(self.ResourceRole) == resource:
+                    return index
+                found = visit(index)
+                if found.isValid():
+                    return found
+            return QModelIndex()
+
+        return visit()
+
     def _item(self, index: QModelIndex) -> _TreeItem | None:
         if index.isValid():
             return index.internalPointer()
@@ -124,7 +137,7 @@ class CorpusExplorerPane(QWidget):
         self.empty_label.setProperty("muted", True)
         self.add_button = QPushButton("Add Resource", objectName="addResourceButton")
         self.add_button.setEnabled(False)
-        self.add_button.setToolTip("Resource import will be added in a future milestone.")
+        self.add_button.setToolTip("Add a logical corpus resource to this project.")
 
         heading = QLabel("CORPUS", objectName="explorerHeading")
         footer = QFrame(objectName="explorerFooter")
@@ -142,8 +155,11 @@ class CorpusExplorerPane(QWidget):
         self.tree.selectionModel().currentChanged.connect(self._selection_changed)
         self.clear()
 
-    def populate(self, tree: ExplorerTree) -> None:
+    def populate(
+        self, tree: ExplorerTree, selected_resource: ResourceIdentity | None = None
+    ) -> None:
         self.model.replace(tree)
+        self.add_button.setEnabled(True)
         empty = tree.resource_count == 0
         self.empty_label.setText(
             "No resources yet.\n\nAdd your first audio, transcript, or text "
@@ -151,13 +167,17 @@ class CorpusExplorerPane(QWidget):
         )
         self.tree.setVisible(not empty)
         self.tree.expandAll()
-        selected = self.model.first_resource_index()
+        selected = (
+            self.model.resource_index(selected_resource)
+            if selected_resource is not None else self.model.first_resource_index()
+        )
         if selected.isValid():
             self.tree.setCurrentIndex(selected)
 
     def clear(self) -> None:
         self.model.replace(None)
         self.tree.setVisible(False)
+        self.add_button.setEnabled(False)
         self.empty_label.setText("Open a project to browse corpus resources.")
         self.resourceSelected.emit(None)
 

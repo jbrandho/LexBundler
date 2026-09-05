@@ -76,9 +76,11 @@ class ResourceOverview:
     breadcrumb: tuple[str, ...]
     label: str
     representation_kinds: tuple[str, ...]
+    transcript_provenance: str | None
     transcript_source_label: str | None
     utterances: tuple[str, ...]
     alignments: tuple[AlignmentOverview, ...]
+    reviewable_count: int
     approved_count: int
     assets: tuple[AssetOverview, ...]
     processing_history: tuple[ProcessingOverview, ...]
@@ -132,6 +134,12 @@ class ProjectExplorerService:
         review = self._alignment_review.load(
             resource.source_id, resource.source_unit_id
         )
+        transcript_utterances, transcript_representation, transcript_provenance = (
+            self._transcript_presentation(representations, layers, runs)
+        )
+        representation_kinds = tuple(dict.fromkeys(
+            item.representation_kind for item in representations
+        ))
 
         alignments = []
         for layer in layers:
@@ -198,22 +206,69 @@ class ProjectExplorerService:
             run.id, run.process_type, run.tool_name, run.status,
             _time_text(run.completed_at),
         ) for run in history[:8])
-        transcript_asset = next(
-            (asset for asset in assets if "text source" in (asset.role or "")),
-            None,
-        )
+        transcript_asset = next((asset for asset in assets
+            if transcript_representation is not None
+            and asset.asset_id == transcript_representation.source_asset_id), None)
         return ResourceOverview(
             resource,
             tuple(breadcrumb),
             unit.label if unit else source.name,
-            tuple(dict.fromkeys(item.representation_kind for item in representations)),
+            representation_kinds,
+            transcript_provenance,
             transcript_asset.label if transcript_asset else None,
-            tuple(item.text for item in review.utterances),
+            transcript_utterances,
             tuple(alignments),
+            len(review.utterances),
             sum(item.approval is not None for item in review.utterances),
             assets,
             processing,
         )
+
+    def _transcript_presentation(self, representations, layers, runs):
+        candidates = [
+            layer for layer in layers
+            if layer.layer_kind == "transcript_line"
+            and (layer.created_by_run_id is None
+                 or (layer.created_by_run_id in runs
+                     and runs[layer.created_by_run_id].status == "succeeded"))
+        ]
+        preferences = (
+            ("authoritative_source", "authoritative", "authoritative"),
+            ("machine_transcript", "machine_unreviewed", "machine_unreviewed"),
+        )
+        for representation_kind, span_role, provenance in preferences:
+            by_id = {
+                item.id: item for item in representations
+                if item.representation_kind == representation_kind
+            }
+            if not by_id:
+                continue
+            for layer in sorted(candidates, key=lambda item: item.id, reverse=True):
+                rows = []
+                selected_representation = None
+                for segment in self._text_segments.list_segments(layer.id):
+                    for span in self._text_segments.list_segment_text_spans(segment.id):
+                        representation = by_id.get(span.text_representation_id)
+                        if span.role == span_role and representation is not None:
+                            rows.append((
+                                segment.sequence or 0,
+                                representation.content[
+                                    span.start_offset:span.end_offset
+                                ],
+                            ))
+                            selected_representation = representation
+                            break
+                if rows:
+                    rows.sort(key=lambda item: item[0])
+                    return (
+                        tuple(text for _sequence, text in rows),
+                        selected_representation,
+                        provenance,
+                    )
+            return (
+                (), max(by_id.values(), key=lambda item: item.id), provenance
+            )
+        return (), None, None
 
     def _source_node(self, source) -> ExplorerNode:
         units = self._corpus.list_source_units(source.id)

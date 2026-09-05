@@ -107,13 +107,19 @@ class ResourceWorkspace(QWidget):
         self._service = explorer_service
         self._resource: ResourceIdentity | None = None
         self.title = QLabel(objectName="resourceTitle")
+        self.add_asset_button = QPushButton("Add Asset", objectName="addAssetButton")
+        self.add_asset_button.setEnabled(False)
         self.breadcrumb = QLabel(objectName="resourceBreadcrumb")
         self.breadcrumb.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         header = QWidget(objectName="resourceHeader")
         header_layout = QVBoxLayout(header)
         header_layout.setContentsMargins(18, 14, 18, 8)
         header_layout.setSpacing(2)
-        header_layout.addWidget(self.title)
+        title_row = QHBoxLayout()
+        title_row.addWidget(self.title)
+        title_row.addStretch()
+        title_row.addWidget(self.add_asset_button)
+        header_layout.addLayout(title_row)
         header_layout.addWidget(self.breadcrumb)
 
         self.tabs = QTabWidget(objectName="resourceTabs")
@@ -155,6 +161,10 @@ class ResourceWorkspace(QWidget):
         self.stack.addWidget(self.empty_state)
         self.stack.addWidget(resource_page)
         self.clear()
+
+    @property
+    def current_resource(self) -> ResourceIdentity | None:
+        return self._resource
 
     def _build_overview(self) -> None:
         content = QWidget()
@@ -286,6 +296,7 @@ class ResourceWorkspace(QWidget):
             self.stack.setCurrentIndex(0)
             return
         self._show_overview(self._service.load_overview(resource))
+        self.add_asset_button.setEnabled(True)
         self.stack.setCurrentIndex(1)
         self.tabs.setCurrentWidget(self.overview_tab)
 
@@ -316,8 +327,9 @@ class ResourceWorkspace(QWidget):
 
     def _clear_data(self) -> None:
         self.title.clear()
+        self.add_asset_button.setEnabled(False)
         for card, message in ((self.audio_card, "No audio available"),
-                              (self.transcript_card, "No authoritative transcript"),
+                              (self.transcript_card, "No transcript available"),
                               (self.alignment_card, "No alignment evidence"),
                               (self.review_card, "No reviewable utterances")):
             card.show_empty(message)
@@ -326,7 +338,7 @@ class ResourceWorkspace(QWidget):
         self.continue_review_button.setEnabled(False)
         self.transcript_model.replace(())
         self.transcript_summary.clear()
-        self.transcript_empty.setText("No authoritative transcript")
+        self.transcript_empty.setText("No transcript available")
         self.alignment_empty.setText("No alignment evidence")
         self.assets_empty.setText("No assets available")
         for table in (self.processing_table, self.alignment_table, self.assets_table):
@@ -348,15 +360,21 @@ class ResourceWorkspace(QWidget):
         else:
             self.audio_card.show_empty("No audio available")
         total = len(overview.utterances)
-        if overview.representation_kinds or total:
+        if overview.transcript_provenance == "authoritative":
             kinds = ", ".join(overview.representation_kinds) or "Canonical text"
             self.transcript_card.show_content(
                 "Authoritative", f"{total} utterance{'s' if total != 1 else ''}",
                 f"Representation: {kinds}\nSource: {overview.transcript_source_label or 'Recorded provenance'}",
                 success=True,
             )
+        elif overview.transcript_provenance == "machine_unreviewed":
+            self.transcript_card.show_content(
+                "Machine transcript", "Needs review",
+                "0 reviewed utterances\nRepresentation: machine_transcript"
+                f"\nSource: {overview.transcript_source_label or 'Recorded provenance'}",
+            )
         else:
-            self.transcript_card.show_empty("No authoritative transcript")
+            self.transcript_card.show_empty("No transcript available")
         if overview.alignments:
             item = overview.alignments[0]
             counts = ", ".join(f"{entry.item_count} {entry.tier or 'items'}" for entry in overview.alignments)
@@ -367,24 +385,30 @@ class ResourceWorkspace(QWidget):
             )
         else:
             self.alignment_card.show_empty("No alignment evidence")
-        if total:
+        reviewable = overview.reviewable_count
+        if reviewable:
             self.review_card.show_content(
-                f"{overview.approved_count} of {total} utterances approved",
-                "Approved" if overview.approved_count == total else "Needs review", "",
-                success=overview.approved_count == total,
+                f"{overview.approved_count} of {reviewable} utterances approved",
+                "Approved" if overview.approved_count == reviewable else "Needs review", "",
+                success=overview.approved_count == reviewable,
             )
-            self.review_progress.setMaximum(total)
+            self.review_progress.setMaximum(reviewable)
             self.review_progress.setValue(overview.approved_count)
             self.review_progress.show()
         else:
             self.review_card.show_empty("No reviewable utterances")
             self.review_progress.hide()
-        self.continue_review_button.setEnabled(bool(total))
+        self.continue_review_button.setVisible(bool(reviewable))
+        self.continue_review_button.setEnabled(bool(reviewable))
         self.transcript_model.replace(overview.utterances)
-        self.transcript_summary.setText(
-            f"Authoritative · {total} utterance{'s' if total != 1 else ''}" if total else ""
-        )
-        self.transcript_empty.setText("" if total else "No authoritative transcript")
+        if overview.transcript_provenance == "authoritative" and total:
+            summary = f"Authoritative · {total} utterance{'s' if total != 1 else ''}"
+        elif overview.transcript_provenance == "machine_unreviewed" and total:
+            summary = "Machine transcript · Needs review"
+        else:
+            summary = ""
+        self.transcript_summary.setText(summary)
+        self.transcript_empty.setText("" if total else "No transcript available")
         self._fill_table(self.alignment_table, (
             (item.name, item.tier or "—", str(item.item_count), item.tool_name or "—",
              item.status, item.completed_at or "—") for item in overview.alignments

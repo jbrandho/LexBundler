@@ -154,7 +154,7 @@ class AlignmentReviewService:
         alignment_items = self._alignment_items(selected_layer)
         approvals = self._review_approvals(source_id, source_unit_id)
 
-        utterances = tuple(
+        projected = tuple(
             self._utterance(
                 segment,
                 span,
@@ -167,6 +167,7 @@ class AlignmentReviewService:
             )
             for segment, span, representation in transcript_rows
         )
+        utterances = tuple(item for item in projected if item.playback_available)
         return ReviewSelection(alignments, selected_id, utterances)
 
     def _latest_transcript_layer(

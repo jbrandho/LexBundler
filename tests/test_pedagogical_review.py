@@ -45,6 +45,31 @@ def _request(project, graph, audio, index=0, start=500, end=900, edited=False):
     )
 
 
+def _aligned_request(
+    project, source, graph, audio, *, index=0, start=500, end=900, edited=False
+):
+    segment = graph.segments[index]
+    span = project.text_segments.list_segment_text_spans(segment.id)[0]
+    run = project.corpus.start_processing_run("import", tool_name="LexBundler")
+    alignment = project.text_segments.create_alignment_graph(AlignmentGraphSpec(
+        source.id, None, graph.representation.id, audio.id, "zh", run.id,
+        "authoritative_alignment", "aligned_source",
+        (AlignmentLayerSpec(
+            "MFA word alignment", "forced_alignment", "alignment_word",
+            {"tier": "words"},
+            (AlignmentSegmentSpec(
+                0, graph.representation.content[span.start_offset:span.end_offset],
+                start + 50, end - 50, span.start_offset, span.end_offset,
+            ),),
+        ),),
+    ))
+    project.corpus.finish_processing_run(run.id, status="succeeded")
+    return replace(
+        _request(project, graph, audio, index=index, start=start, end=end, edited=edited),
+        alignment_layer_id=alignment.layers[0].id,
+    )
+
+
 def test_approval_persists_exact_authoritative_and_original_media_spans(tmp_path: Path) -> None:
     project, project_path, source, graph, audio, _audio_path = _context(tmp_path)
     transcript_before = project.text_segments.list_segments(graph.layer.id)
@@ -103,18 +128,20 @@ def test_approval_persists_exact_authoritative_and_original_media_spans(tmp_path
     project.close_project()
     project.open_project(project_path)
     selection = project.alignment_review.load(source.id, None)
-    assert selection.utterances[0].approval is None
-    assert (selection.utterances[1].approval.start_ms,
-            selection.utterances[1].approval.end_ms) == (1200, 1800)
+    assert len(selection.utterances) == 1
+    assert (selection.utterances[0].approval.start_ms,
+            selection.utterances[0].approval.end_ms) == (1200, 1800)
 
 
 def test_reapproval_is_append_only_and_latest_successful_is_current(tmp_path: Path) -> None:
     project, _path, source, graph, audio, _audio_path = _context(tmp_path, "一句")
+    request = _aligned_request(project, source, graph, audio)
     first = project.pedagogical_reviews.approve(
-        _request(project, graph, audio, start=500, end=900)
+        request
     )
     second = project.pedagogical_reviews.approve(
-        _request(project, graph, audio, start=450, end=950, edited=True)
+        replace(request, approved_start_ms=450, approved_end_ms=950,
+                manually_edited=True)
     )
 
     history = project.alignment_review.list_review_history(
@@ -146,6 +173,21 @@ def test_invalid_approval_bounds_are_rejected_without_run(
     )
 
 
+def test_approval_without_alignment_is_rejected_without_review_run(
+    tmp_path: Path,
+) -> None:
+    project, _path, _source, graph, audio, _audio_path = _context(
+        tmp_path, "一句"
+    )
+
+    with pytest.raises(PedagogicalReviewError, match="forced-alignment"):
+        project.pedagogical_reviews.approve(_request(project, graph, audio))
+
+    assert not any(
+        run.process_type == "review" for run in project.corpus.list_processing_runs()
+    )
+
+
 def test_approval_outside_review_context_is_rejected(tmp_path: Path) -> None:
     project, _path, _source, graph, audio, _audio_path = _context(tmp_path, "一句")
     request = replace(
@@ -160,7 +202,8 @@ def test_approval_outside_review_context_is_rejected(tmp_path: Path) -> None:
 def test_approval_graph_failure_rolls_back_and_marks_run_failed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    project, project_path, _source, graph, audio, _audio_path = _context(tmp_path, "一句")
+    project, project_path, source, graph, audio, _audio_path = _context(tmp_path, "一句")
+    request = _aligned_request(project, source, graph, audio)
     original = sqlite_text_store._insert_segment
 
     def fail(*args, **kwargs):
@@ -170,7 +213,7 @@ def test_approval_graph_failure_rolls_back_and_marks_run_failed(
 
     monkeypatch.setattr(sqlite_text_store, "_insert_segment", fail)
     with pytest.raises(RuntimeError, match="review graph failure"):
-        project.pedagogical_reviews.approve(_request(project, graph, audio))
+        project.pedagogical_reviews.approve(request)
     with sqlite3.connect(project_path) as connection:
         assert connection.execute(
             "SELECT COUNT(*) FROM segment_layer WHERE layer_kind = ?",
